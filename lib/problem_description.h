@@ -18,8 +18,8 @@ inline constexpr float kComplexNoiseQuadratureScale = 0.7071067811865475f;
 inline constexpr float kPi = 3.14159265358979323846f;
 inline constexpr std::size_t kRadarBlockSize = 256;
 inline constexpr std::size_t kRadarChirpCount = 256;
-inline constexpr std::size_t kProbeNumX = 8;
-inline constexpr std::size_t kProbeNumY = 8;
+inline constexpr std::size_t kProbeNumX = 4;
+inline constexpr std::size_t kProbeNumY = 4;
 inline constexpr std::size_t kProbeNumElements = kProbeNumX * kProbeNumY;
 
 struct CarDynamicsModel {
@@ -53,7 +53,7 @@ struct Config {
   float field_gain = 1.0f;
   float min_range_m = 1.0f;
   float speed_of_light_mps = 299'792'458.0f;
-  float bandwidth_hz = 100.0e6f;
+  float bandwidth_hz = 100e6f;
 };
 
 struct Metrics {

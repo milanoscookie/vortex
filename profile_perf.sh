@@ -4,7 +4,7 @@
 set -e
 
 BUILD_DIR="build"
-APP="$BUILD_DIR/src/RadarDemo"
+APP="$BUILD_DIR/src/Vortex"
 
 if [ ! -f "$APP" ]; then
   echo "Error: $APP not found. Build the project first."

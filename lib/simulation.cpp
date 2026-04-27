@@ -1,9 +1,6 @@
 #include "simulation.h"
 
 
-namespace {
-
-} // namespace
 
 RadarSimulator::RadarSimulator(const Config &config, const TargetModel &target,
                                std::uint32_t /* random_seed */)

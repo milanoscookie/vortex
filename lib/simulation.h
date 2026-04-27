@@ -4,9 +4,9 @@
 #include "environment.h"
 #include "probe.h"
 
-#include <cmath>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <complex>
 #include <cstddef>
 #include <cstdint>
@@ -26,17 +26,18 @@ public:
   using Metrics = problem::Metrics;
 
   template <std::size_t NumElements>
-  using ElementVector = Eigen::Matrix<Complex, static_cast<int>(NumElements), 1>;
+  using ElementVector =
+      Eigen::Matrix<Complex, static_cast<int>(NumElements), 1>;
 
-  template <std::size_t NumX, std::size_t NumY>
-  struct ProbeState {
+  template <std::size_t NumX, std::size_t NumY> struct ProbeState {
     std::array<Vec3, NumX * NumY> element_positions_m;
     std::array<float, NumX * NumY> element_delay_s;
     std::array<float, NumX * NumY> element_weight;
   };
 
   using DefaultProbe = Probe<problem::kProbeNumX, problem::kProbeNumY>;
-  using DefaultProbeState = ProbeState<problem::kProbeNumX, problem::kProbeNumY>;
+  using DefaultProbeState =
+      ProbeState<problem::kProbeNumX, problem::kProbeNumY>;
 
   RadarSimulator(const Config &config, const TargetModel &target,
                  std::uint32_t random_seed = 0U);
@@ -52,7 +53,8 @@ public:
             Complex tx_sample);
 
   template <std::size_t NumX, std::size_t NumY>
-  ProbeState<NumX, NumY> prepareProbeState(const Probe<NumX, NumY> &probe) const;
+  ProbeState<NumX, NumY>
+  prepareProbeState(const Probe<NumX, NumY> &probe) const;
 
   template <std::size_t NumX, std::size_t NumY>
   void step(const ProbeState<NumX, NumY> &probe_state,
@@ -114,14 +116,16 @@ auto RadarSimulator::prepareProbeState(const Probe<NumX, NumY> &probe) const
 
 template <std::size_t NumX, std::size_t NumY>
 void RadarSimulator::step(const Probe<NumX, NumY> &probe,
-                          ElementVector<NumX * NumY> &output, Complex tx_sample) {
+                          ElementVector<NumX * NumY> &output,
+                          Complex tx_sample) {
   const ProbeState<NumX, NumY> probe_state = makeProbeState(probe);
   step(probe_state, output, tx_sample);
 }
 
 template <std::size_t NumX, std::size_t NumY>
 void RadarSimulator::stepChirp(const ProbeState<NumX, NumY> &probe_state,
-                               Complex *output_buffer, const Complex *tx_samples) {
+                               Complex *output_buffer,
+                               const Complex *tx_samples) {
   // 1. Sequentially fill TX history for the entire chirp
   for (std::size_t s = 0; s < kBlockSize; ++s) {
     tx_history_[(sample_index_ + s) & kTxHistoryMask] = tx_samples[s];
@@ -145,29 +149,31 @@ void RadarSimulator::stepChirp(const ProbeState<NumX, NumY> &probe_state,
     const Vec3 pt = dynamics_.positionAt(t_s);
     const float range_center = pt.norm();
     unit_dirs[s] = pt / range_center;
-    
-    const float total_delay_s = (range_center * 2.0f) * inv_c; 
-    const float delayed_idx_f = static_cast<float>(sample_index_ + s) - total_delay_s * config_.sample_rate_hz;
-    
+
+    const float total_delay_s = (range_center * 2.0f) * inv_c;
+    const float delayed_idx_f = static_cast<float>(sample_index_ + s) -
+                                total_delay_s * config_.sample_rate_hz;
+
     Complex delayed_sample(0, 0);
     if (delayed_idx_f >= 0) {
       const std::size_t low = static_cast<std::size_t>(delayed_idx_f);
       const float frac = delayed_idx_f - static_cast<float>(low);
-      delayed_sample = (1.0f - frac) * tx_history_[low & kTxHistoryMask] + 
+      delayed_sample = (1.0f - frac) * tx_history_[low & kTxHistoryMask] +
                        frac * tx_history_[(low + 1) & kTxHistoryMask];
     }
 
-    const float path_gain = config_.field_gain / std::max(range_center * range_center, 1e-6f);
+    const float path_gain =
+        config_.field_gain / std::max(range_center * range_center, 1e-6f);
     base_returns[s] = delayed_sample * reflectivity * path_gain;
     base_phases[s] = -two_pi * (range_center * 2.0f) * inv_lambda;
   }
 
-  // 3. Parallelize over antenna elements ONCE per chirp
-  #pragma omp parallel for
+// 3. Parallelize over antenna elements ONCE per chirp
+#pragma omp parallel for
   for (int e = 0; e < static_cast<int>(NumX * NumY); ++e) {
     const Vec3 pos = probe_state.element_positions_m[e];
     const float weight = probe_state.element_weight[e];
-    
+
     if (weight == 0.0f) {
       for (std::size_t s = 0; s < kBlockSize; ++s) {
         output_buffer[s * (NumX * NumY) + e] = Complex(0.0f, 0.0f);
@@ -179,20 +185,23 @@ void RadarSimulator::stepChirp(const ProbeState<NumX, NumY> &probe_state,
       const float spatial_phase = two_pi * unit_dirs[s].dot(pos) * inv_lambda;
       const float total_phase = base_phases[s] + spatial_phase;
       const std::size_t out_idx = s * (NumX * NumY) + e;
-      
+
       // Fast path trig: explicit cos/sin often optimizes to hardware sincos
-      output_buffer[out_idx] = weight * base_returns[s] * Complex(std::cos(total_phase), std::sin(total_phase));
+      output_buffer[out_idx] =
+          weight * base_returns[s] *
+          Complex(std::cos(total_phase), std::sin(total_phase));
     }
   }
 
-  last_metrics_ = metricsAt(t_start + (kBlockSize / 2) * dt);
+  last_metrics_ = metricsAt(t_start + (static_cast<float>(kBlockSize) / 2) * dt);
   sample_index_ += kBlockSize;
   time_s_ += kBlockSize * dt;
 }
 
 template <std::size_t NumX, std::size_t NumY>
 void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
-                          ElementVector<NumX * NumY> &output, Complex tx_sample) {
+                          ElementVector<NumX * NumY> &output,
+                          Complex tx_sample) {
   storeTxSample(tx_sample);
 
   const float t_s = time_s_;
@@ -213,7 +222,7 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
   // TX Range from origin (0,0,0) to target
   const float range_tx_m = std::sqrt(pt_x * pt_x + pt_y * pt_y + pt_z * pt_z);
 
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int element_index = 0; element_index < static_cast<int>(NumX * NumY);
        ++element_index) {
     const float weight = probe_state.element_weight[element_index];
@@ -223,7 +232,8 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
     }
 
     Complex sample(0.0f, 0.0f);
-    // Noise sampling is currently skipped for performance/thread-safety in this benchmark
+    // Noise sampling is currently skipped for performance/thread-safety in this
+    // benchmark
     if (has_floor) {
       sample += environment_.sampleStaticFloorplane(sample_index_ % kBlockSize);
     }
@@ -235,14 +245,16 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
 
     const float range_rx_m = std::sqrt(dx * dx + dy * dy + dz * dz);
     if (range_rx_m <= max_range) {
-        const float total_range_m = range_tx_m + range_rx_m;
-        const float safe_range_rx = std::max(range_rx_m, min_range);
+      const float total_range_m = range_tx_m + range_rx_m;
+      const float safe_range_rx = std::max(range_rx_m, min_range);
 
-        const float delay_s = total_range_m * inv_c + probe_state.element_delay_s[element_index];
-        const float path_gain = field_gain / (safe_range_rx * safe_range_rx);
-        const float phase = -two_pi * total_range_m * inv_lambda;
+      const float delay_s =
+          total_range_m * inv_c + probe_state.element_delay_s[element_index];
+      const float path_gain = field_gain / (safe_range_rx * safe_range_rx);
+      const float phase = -two_pi * total_range_m * inv_lambda;
 
-        sample += (weight * path_gain) * delayedTxSample(delay_s) * reflectivity * std::polar(1.0f, phase);
+      sample += (weight * path_gain) * delayedTxSample(delay_s) * reflectivity *
+                std::polar(1.0f, phase);
     }
     output(static_cast<Eigen::Index>(element_index)) = sample;
   }

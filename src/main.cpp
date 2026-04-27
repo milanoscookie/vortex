@@ -126,7 +126,7 @@ int main() {
 
     const float chirp_duration_s =
         static_cast<float>(RadarSimulator::kBlockSize) / sim_config.sample_rate_hz;
-    const std::size_t chirp_count = 
+    const std::size_t chirp_count =
         static_cast<std::size_t>(std::llround(0.1f / chirp_duration_s));
 
     RadarSimulator simulator(sim_config, target, description.floorplane, description.random_seed);
@@ -156,18 +156,18 @@ int main() {
     // Optimized loop: Batch multiple chirps before writing to disk
     for (std::size_t batch_start = 0; batch_start < chirp_count; batch_start += kBatchSize) {
       std::size_t current_batch_size = std::min(kBatchSize, chirp_count - batch_start);
-      
+
       for (std::size_t b = 0; b < current_batch_size; ++b) {
         std::size_t chirp_idx = batch_start + b;
         Complex* chirp_ptr = batch_buffer.data() + b * RadarSimulator::kBlockSize * problem::kProbeNumElements;
-        
+
         // Heavy multi-core computation happens here
         simulator.stepChirp(probe_state, chirp_ptr, tx_chirp.data());
         appendTruthRow(truth_out, chirp_idx, simulator.lastMetrics());
       }
-      
+
       // Perform one large write per batch (e.g. 8MB per write)
-      rx_out.write(reinterpret_cast<const char*>(batch_buffer.data()), 
+      rx_out.write(reinterpret_cast<const char*>(batch_buffer.data()),
                    static_cast<std::streamsize>(current_batch_size * RadarSimulator::kBlockSize * problem::kProbeNumElements * sizeof(Complex)));
     }
 

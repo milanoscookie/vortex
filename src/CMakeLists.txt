@@ -1,3 +1,4 @@
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_executable(Vortex
   main.cpp
   ${VORTEX_CORE_SOURCES}
