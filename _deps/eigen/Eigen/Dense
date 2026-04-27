@@ -1,0 +1,8 @@
+// Vendored Eigen headers provide the dense, sparse, and unsupported linear algebra APIs used by the project. @feature:eigen-core
+#include "Core"
+#include "LU"
+#include "Cholesky"
+#include "QR"
+#include "SVD"
+#include "Geometry"
+#include "Eigenvalues"

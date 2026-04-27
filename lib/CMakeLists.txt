@@ -1,0 +1,14 @@
+find_package(OpenMP REQUIRED)
+
+set(VORTEX_CORE_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/dynamics.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/environment.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/simulation.cpp
+  PARENT_SCOPE
+)
+
+set(VORTEX_CORE_INCLUDE_DIRS
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/_deps/eigen
+  PARENT_SCOPE
+)
