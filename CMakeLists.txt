@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
 project(VORTEX CXX)
 
+option(VORTEX_ENABLE_PGO_GENERATE "Build with profile generation enabled" OFF)
+option(VORTEX_ENABLE_PGO_USE "Build with profile use enabled" OFF)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -22,8 +25,25 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     "$<$<CONFIG:RelWithDebInfo>:-mtune=native>"
     "$<$<CONFIG:RelWithDebInfo>:-ffast-math>"
     "$<$<CONFIG:RelWithDebInfo>:-fno-math-errno>"
-    "$<$<CONFIG:RelWithDebInfo>:-fomit-frame-pointer>"
+    "$<$<CONFIG:RelWithDebInfo>:-fno-omit-frame-pointer>"
   )
+
+  if(VORTEX_ENABLE_PGO_GENERATE)
+    add_compile_options(-fprofile-generate)
+    add_link_options(-fprofile-generate)
+  endif()
+
+  if(VORTEX_ENABLE_PGO_USE)
+    add_compile_options(-fprofile-use -fprofile-correction)
+    add_link_options(-fprofile-use -fprofile-correction)
+  endif()
+endif()
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT vortex_ipo_supported)
+if(vortex_ipo_supported)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
 endif()
 
 # Enable CTest at the top level so tests are discoverable from build/

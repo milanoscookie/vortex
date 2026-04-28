@@ -1,0 +1,13 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 100
+PointerAlignment: Right
+ReferenceAlignment: Right
+BreakBeforeBraces: Attach
+SortIncludes: Never
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AlignAfterOpenBracket: Align
+BinPackArguments: false
+BinPackParameters: false

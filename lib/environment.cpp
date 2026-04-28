@@ -1,5 +1,13 @@
 #include "environment.h"
 
+namespace {
+
+Environment::Complex cis(float phase_rad) noexcept {
+  return {std::cos(phase_rad), std::sin(phase_rad)};
+}
+
+} // namespace
+
 Environment::Environment(const RadarSettings &radar_settings) noexcept
     : radar_settings_(radar_settings) {}
 
@@ -14,6 +22,7 @@ void Environment::clearFloorplane() noexcept {
   floorplane_beat_frequency_hz_ = 0.0f;
   floorplane_amplitude_ = 0.0f;
   floorplane_base_phase_rad_ = 0.0f;
+  floorplane_samples_.fill({0.0f, 0.0f});
   floorplane_valid_ = false;
 }
 
@@ -47,6 +56,19 @@ void Environment::initializeFloorplane(
   floorplane_amplitude_ = amplitude;
   floorplane_base_phase_rad_ = base_phase_rad;
   floorplane_valid_ = amplitude > 0.0f;
+  if (!floorplane_valid_) {
+    floorplane_samples_.fill({0.0f, 0.0f});
+    return;
+  }
+
+  const float phase_step_rad =
+      2.0f * Constants::kPi * beat_frequency_hz / radar_settings_.sample_rate_hz;
+  Complex sample = amplitude * cis(base_phase_rad);
+  const Complex step = cis(phase_step_rad);
+  for (Complex &floorplane_sample : floorplane_samples_) {
+    floorplane_sample = sample;
+    sample *= step;
+  }
 }
 
 Environment::Complex
@@ -55,11 +77,5 @@ Environment::sampleStaticFloorplane(size_t fast_time_index) const noexcept {
     return {0.0f, 0.0f};
   }
 
-  const float sample_period_s = 1.0f / radar_settings_.sample_rate_hz;
-  const float fast_time_s =
-      static_cast<float>(fast_time_index) * sample_period_s;
-  const float phase_rad =
-      2.0f * Constants::kPi * floorplane_beat_frequency_hz_ * fast_time_s +
-      floorplane_base_phase_rad_;
-  return std::polar(floorplane_amplitude_, phase_rad);
+  return floorplane_samples_[fast_time_index % floorplane_samples_.size()];
 }
