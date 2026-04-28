@@ -8,85 +8,99 @@
 
 namespace problem {
 
-using Vec3 = Eigen::Vector3f;
+    using Vec3 = Eigen::Vector3f;
+    using size_t = std::size_t;
 
-inline constexpr float kDefaultNoiseStddev = 0.1f;
-inline constexpr float kNoiseDistributionMean = 0.0f;
-inline constexpr float kNoiseDistributionStddev = 0.1f;
-inline constexpr float kComplexNoiseQuadratureScale = 0.7071067811865475f;
+    struct Constants {
+        static inline constexpr float kPi = 3.14159265358979323846f;
+        static inline constexpr float kSpeedOfLightMps = 299'792'458.0f;
+        static inline constexpr size_t kRadarBlockSize = 256;
+        static inline constexpr float kInvSqrt2 = 0.70710678f;
+    };
 
-inline constexpr float kPi = 3.14159265358979323846f;
-inline constexpr std::size_t kRadarBlockSize = 256;
-inline constexpr std::size_t kRadarChirpCount = 256;
-inline constexpr std::size_t kProbeNumX = 4;
-inline constexpr std::size_t kProbeNumY = 4;
-inline constexpr std::size_t kProbeNumElements = kProbeNumX * kProbeNumY;
+    struct RadarSettings {
+        static inline constexpr size_t kProbeNumX = 8;
+        static inline constexpr size_t kProbeNumY = 8;
+        static inline constexpr size_t kProbeNumElements =
+        kProbeNumX * kProbeNumY;
 
-struct CarDynamicsModel {
-  Vec3 initial_position_m = Vec3(80.0f, -18.0f, 1.5f);
-  Vec3 base_velocity_mps = Vec3(0.0f, 20.0f, 0.0f);
-  float yaw_rad = 0.0f;
-  float length_m = 4.5f;
-  float width_m = 1.8f;
-  float height_m = 1.5f;
-  float bounce_amplitude_m = 0.05f;
-  float bounce_frequency_hz = 3.0f;
-  float bounce_phase_rad = 0.0f;
-  std::complex<float> reflectivity = {1.0f, 0.0f};
-};
+        float sample_rate_hz = 20.0e6f;
+        float bandwidth_hz = 10.0e6f;
 
-using TargetModel = CarDynamicsModel;
+        float carrier_hz = 77.0e9f;
+        float min_range_m = 1.0f;
+        float max_range_m = 500.0f;
 
-struct CarState {
-  Vec3 center_m = Vec3(0.0f, 0.0f, 20.0f);
-  Vec3 velocity_mps = Vec3(0.0f, 30.0f, 0.0f);
-  float yaw_rad = 0.0f;
-  Vec3 size_m = Vec3(4.5f, 1.8f, 1.5f);
-  std::complex<float> reflectivity = {1.0f, 0.0f};
-};
+        float field_gain = 1.0f;
+        float receiver_noiselevel_stddev = 1e-5f;
+        float receiver_noiselevel_mean = 0.0f;
+        float receiver_noise_distribution_stddev = 1.0f;
 
-struct Config {
-  float sample_rate_hz = 20'000'000.0f;
-  float carrier_hz = 77.0e9f;
-  float max_range_m = 500.0f;
-  float noise_stddev = 0.01f;
-  float field_gain = 1.0f;
-  float min_range_m = 1.0f;
-  float speed_of_light_mps = 299'792'458.0f;
-  float bandwidth_hz = 100e6f;
-};
+    };
 
-struct Metrics {
-  float time_s = 0.0f;
-  float range_m = 0.0f;
-  float delay_s = 0.0f;
-  float radial_velocity_mps = 0.0f;
-  float doppler_hz = 0.0f;
-  Vec3 position_m = Vec3::Zero();
-  Vec3 velocity_mps = Vec3::Zero();
-  Vec3 line_of_sight = Vec3::Zero();
-};
+    struct ProbeSettings {
+        Vec3 center_m = Vec3::Zero();
+        float spacing_x_wavelengths = 0.5f;
+        float spacing_y_wavelengths = 0.5f;
+    };
 
-struct FloorplaneClutterConfig {
-  bool enable_static_floorplane = true;
-  float range_m = 100.0f;
-  float amplitude_ref = 0.02f;
-  float reference_range_m = 100.0f;
-  float range_exponent = 1.0f;
-  float phase_rad = 0.0f;
-};
+    struct FloorplaneClutterSettings {
+        bool enable_static_floorplane = true;
+        float range_m = 100.0f;
+        float amplitude_ref = 0.001f;
+        float reference_range_m = 100.0f;
+        float range_exponent = 1.0f;
+        float phase_rad = 0.7f;
+    };
 
-struct ProblemDescription {
-  Config simulation;
-  std::uint32_t random_seed = 1U;
-  std::size_t vehicle_count = 1;
-  float tracking_duration_s = 0.128f;
-  float split_duration_s = 15.0f;
-  float prediction_duration_s = 15.0f;
-  TargetModel target;
-  FloorplaneClutterConfig floorplane = {};
-};
+    struct SimulatorSettings {
+        float burst_duration_s = 1.0f;
+        float tracking_duration_s = 1.00f;
+        float split_duration_s = 15.0f;
+        float prediction_duration_s = 15.0f;
+        std::uint32_t random_seed = 1U;
+        size_t vehicle_count = 1;
+    };
 
-inline const ProblemDescription kDefaultProblemDescription{};
+    struct CarSettings {
+        Vec3 initial_position_m = Vec3(100.0f, 100.0f, 150.0f);
+        Vec3 base_velocity_mps = Vec3(20.0f, 20.0f, 0.0f);
+        float yaw_rad = 0.0f;
+        float length_m = 4.5f;
+        float width_m = 1.8f;
+        float height_m = 1.5f;
+        float bounce_amplitude_m = 0.01f; // heavy: 0.002
+        float bounce_frequency_hz = 12.0f; // heavy: 4
+        float bounce_phase_rad = 0.5f; // each car should be different
+        std::complex<float> reflectivity = std::polar(1.0f, 1.2f);
+    };
+
+    struct VehicleState {
+        Vec3 center_m = Vec3::Zero();
+        Vec3 velocity_mps = Vec3::Zero();
+        float yaw_rad = 0.0f;
+        std::complex<float> reflectivity = {1.0f, 0.0f};
+    };
+
+    struct SimulationMetrics {
+        float time_s = 0.0f;
+        float range_m = 0.0f;
+        float delay_s = 0.0f;
+        float radial_velocity_mps = 0.0f;
+        float doppler_hz = 0.0f;
+        Vec3 position_m = Vec3::Zero();
+        Vec3 velocity_mps = Vec3::Zero();
+        Vec3 line_of_sight = Vec3::Zero();
+    };
+
+    struct ProblemDescription {
+        RadarSettings radar;
+        ProbeSettings probe;
+        FloorplaneClutterSettings floorplane_clutter;
+        SimulatorSettings simulator;
+        CarSettings car;
+    };
+
+    inline const ProblemDescription kDefaultProblemDescription{};
 
 } // namespace problem

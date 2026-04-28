@@ -5,26 +5,32 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 
 class Environment {
 public:
-  using Complex = std::complex<float>;
-  using Config = problem::Config;
-  using FloorplaneClutterConfig = problem::FloorplaneClutterConfig;
+    using size_t = std::size_t;
+    using Complex = std::complex<float>;
+    using RadarSettings = problem::RadarSettings;
+    using FloorplaneClutterSettings = problem::FloorplaneClutterSettings;
+    using Constants = problem::Constants;
 
-  Environment(const Config &config, std::uint32_t random_seed = 0U) noexcept;
-  Environment(const Config &config, const FloorplaneClutterConfig &floorplane_config,
-              std::uint32_t random_seed = 0U) noexcept;
+    explicit Environment(const RadarSettings &radar_settings) noexcept;
+    Environment(const RadarSettings &radar_settings, const FloorplaneClutterSettings &floorplane_settings) noexcept;
 
-  bool hasStaticFloorplane() const noexcept { return floorplane_valid_; }
-  Complex sampleStaticFloorplane(std::size_t fast_time_index) const noexcept;
+    [[nodiscard]] bool hasStaticFloorplane() const noexcept {
+        return floorplane_valid_;
+    }
+    [[nodiscard]] Complex sampleStaticFloorplane(size_t fast_time_index) const noexcept;
 
 private:
-  void initializeFloorplane(const FloorplaneClutterConfig &floorplane_config) noexcept;
+    void clearFloorplane() noexcept;
+    void initializeFloorplane(
+        const FloorplaneClutterSettings &floorplane_settings) noexcept;
 
-  Config config_;
-  float floorplane_beat_frequency_hz_ = 0.0f;
-  float floorplane_amplitude_ = 0.0f;
-  float floorplane_base_phase_rad_ = 0.0f;
-  bool floorplane_valid_ = false;
+    RadarSettings radar_settings_;
+    float floorplane_beat_frequency_hz_ = 0.0f;
+    float floorplane_amplitude_ = 0.0f;
+    float floorplane_base_phase_rad_ = 0.0f;
+    bool floorplane_valid_ = false;
 };
