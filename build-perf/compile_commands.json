@@ -1,6 +1,12 @@
 [
 {
   "directory": "/home/milan/Documents/DSPClass/radar/build-perf/src",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O2 -g -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fno-omit-frame-pointer -o CMakeFiles/Vortex.dir/fmcw_tracker.cpp.o -c /home/milan/Documents/DSPClass/radar/src/fmcw_tracker.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/src/fmcw_tracker.cpp",
+  "output": "src/CMakeFiles/Vortex.dir/fmcw_tracker.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-perf/src",
   "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O2 -g -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fno-omit-frame-pointer -o CMakeFiles/Vortex.dir/main.cpp.o -c /home/milan/Documents/DSPClass/radar/src/main.cpp",
   "file": "/home/milan/Documents/DSPClass/radar/src/main.cpp",
   "output": "src/CMakeFiles/Vortex.dir/main.cpp.o"

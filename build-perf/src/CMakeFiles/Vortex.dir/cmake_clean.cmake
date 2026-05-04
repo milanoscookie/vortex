@@ -6,6 +6,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/Vortex.dir/__/lib/environment.cpp.o.d"
   "CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o"
   "CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o.d"
+  "CMakeFiles/Vortex.dir/fmcw_tracker.cpp.o"
+  "CMakeFiles/Vortex.dir/fmcw_tracker.cpp.o.d"
   "CMakeFiles/Vortex.dir/main.cpp.o"
   "CMakeFiles/Vortex.dir/main.cpp.o.d"
   "CMakeFiles/Vortex.dir/radar_algo.cpp.o"

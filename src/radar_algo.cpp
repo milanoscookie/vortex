@@ -3,19 +3,18 @@
 #include "probe.h"
 #include "simulation.h"
 
-#include <algorithm>
 #include <cmath>
-#include <cstddef>
+#include <stdexcept>
 #include <vector>
 
 namespace radar_algo {
 namespace {
 
-using Complex = RadarSimulator::Complex;
 using Probe64 =
     Probe<problem::RadarSettings::kProbeNumX, problem::RadarSettings::kProbeNumY>;
 
-constexpr std::size_t kWriteBatchSize = 256;
+constexpr std::size_t kInitialTrackingBatchCount = 11;
+constexpr std::size_t kInitialTrackingCpiChirps = 64;
 
 Complex cis(float phase_rad) {
     return {std::cos(phase_rad), std::sin(phase_rad)};
@@ -53,6 +52,8 @@ Probe64 makeProbe(const problem::ProblemDescription &description) {
     return Probe64(probe_settings.center_m, spacing_x_m, spacing_y_m);
 }
 
+} // namespace
+
 std::size_t computeChirpCount(const problem::ProblemDescription &description) {
     const float chirp_duration_s =
         static_cast<float>(RadarSimulator::kBlockSize) / description.radar.sample_rate_hz;
@@ -60,29 +61,57 @@ std::size_t computeChirpCount(const problem::ProblemDescription &description) {
         std::llround(description.simulator.burst_duration_s / chirp_duration_s));
 }
 
-} // namespace
+problem::ProblemDescription
+makeSingleTargetTrackingDescription(const problem::ProblemDescription &base) {
+    problem::ProblemDescription description = base;
+    if (description.cars.empty()) {
+        throw std::runtime_error("single-target tracking requires at least one car");
+    }
 
-void runRadarAlgorithm(const problem::ProblemDescription &description) {
+    description.cars = {description.cars.front()};
+    description.simulator.vehicle_count = 1;
+    description.simulator.random_seed = 0U;
+    description.floorplane_clutter.enable_static_floorplane = false;
+    description.radar.receiver_noiselevel_stddev = 0.0f;
+    description.radar.receiver_noiselevel_mean = 0.0f;
+    description.radar.receiver_noise_distribution_stddev = 0.0f;
+
+    const float chirp_duration_s =
+        static_cast<float>(RadarSimulator::kBlockSize) / description.radar.sample_rate_hz;
+    description.simulator.burst_duration_s =
+        static_cast<float>(kInitialTrackingBatchCount * kInitialTrackingCpiChirps) *
+        chirp_duration_s;
+
+    return description;
+}
+
+void streamRadarChirps(const problem::ProblemDescription &description,
+                       const ChirpCallback &callback) {
     const std::size_t chirp_count = computeChirpCount(description);
+    const std::size_t num_rx = problem::RadarSettings::kProbeNumElements;
+
     RadarSimulator simulator(description);
     const Probe64 probe = makeProbe(description);
     const auto probe_state = simulator.prepareProbeState(probe);
     const std::vector<Complex> tx_chirp = computeChirpReference(description.radar);
     RadarSimulator::ElementVector step_output;
+    std::vector<Complex> rx_chirp(RadarSimulator::kBlockSize * num_rx);
 
-    for (std::size_t batch_start = 0; batch_start < chirp_count;
-         batch_start += kWriteBatchSize) {
-        const std::size_t current_batch_size =
-            std::min(kWriteBatchSize, chirp_count - batch_start);
+    for (std::size_t chirp_index = 0; chirp_index < chirp_count; ++chirp_index) {
+        for (std::size_t sample_index = 0; sample_index < RadarSimulator::kBlockSize;
+             ++sample_index) {
+            simulator.step<problem::RadarSettings::kProbeNumX,
+                           problem::RadarSettings::kProbeNumY>(
+                probe_state, step_output, tx_chirp[sample_index]);
 
-        for (std::size_t b = 0; b < current_batch_size; ++b) {
-            for (std::size_t sample_index = 0; sample_index < RadarSimulator::kBlockSize;
-                 ++sample_index) {
-                simulator.step<problem::RadarSettings::kProbeNumX,
-                               problem::RadarSettings::kProbeNumY>(
-                    probe_state, step_output, tx_chirp[sample_index]);
+            const std::size_t base_offset = sample_index * num_rx;
+            for (std::size_t rx_index = 0; rx_index < num_rx; ++rx_index) {
+                rx_chirp[base_offset + rx_index] =
+                    step_output(static_cast<Eigen::Index>(rx_index));
             }
         }
+
+        callback(chirp_index, tx_chirp, rx_chirp);
     }
 }
 

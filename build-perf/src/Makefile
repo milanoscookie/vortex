@@ -212,6 +212,30 @@ __/lib/simulation.cpp.s:
 	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.s
 .PHONY : __/lib/simulation.cpp.s
 
+fmcw_tracker.o: fmcw_tracker.cpp.o
+.PHONY : fmcw_tracker.o
+
+# target to build an object file
+fmcw_tracker.cpp.o:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/fmcw_tracker.cpp.o
+.PHONY : fmcw_tracker.cpp.o
+
+fmcw_tracker.i: fmcw_tracker.cpp.i
+.PHONY : fmcw_tracker.i
+
+# target to preprocess a source file
+fmcw_tracker.cpp.i:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/fmcw_tracker.cpp.i
+.PHONY : fmcw_tracker.cpp.i
+
+fmcw_tracker.s: fmcw_tracker.cpp.s
+.PHONY : fmcw_tracker.s
+
+# target to generate assembly for a file
+fmcw_tracker.cpp.s:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/fmcw_tracker.cpp.s
+.PHONY : fmcw_tracker.cpp.s
+
 main.o: main.cpp.o
 .PHONY : main.o
 
@@ -279,6 +303,9 @@ help:
 	@echo "... __/lib/simulation.o"
 	@echo "... __/lib/simulation.i"
 	@echo "... __/lib/simulation.s"
+	@echo "... fmcw_tracker.o"
+	@echo "... fmcw_tracker.i"
+	@echo "... fmcw_tracker.s"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"
