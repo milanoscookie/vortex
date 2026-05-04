@@ -18,8 +18,17 @@ namespace {
 
 } // namespace
 
+std::vector<CarDynamics> RadarSimulator::makeDynamics(const CarList &car_settings) {
+    std::vector<CarDynamics> dynamics;
+    dynamics.reserve(car_settings.size());
+    for (const CarSettings &car_setting : car_settings) {
+        dynamics.emplace_back(car_setting);
+    }
+    return dynamics;
+}
+
 RadarSimulator::RadarSimulator(const ProblemDescription &description)
-: RadarSimulator(description.radar, description.car,
+: RadarSimulator(description.radar, description.cars,
     description.floorplane_clutter,
     description.simulator.random_seed) {
         default_probe_state_ = prepareDefaultProbeState(description.probe);
@@ -28,13 +37,19 @@ RadarSimulator::RadarSimulator(const ProblemDescription &description)
     RadarSimulator::RadarSimulator(const RadarSettings &radar_settings,
         const CarSettings &car_settings,
         std::uint32_t random_seed)
+    : RadarSimulator(radar_settings, CarList{car_settings}, random_seed) {}
+
+RadarSimulator::RadarSimulator(const RadarSettings &radar_settings,
+    const CarList &car_settings,
+    std::uint32_t random_seed)
     : radar_settings_(radar_settings),
-    dynamics_(car_settings),
+    dynamics_(makeDynamics(car_settings)),
     environment_(radar_settings),
     receiver_noise_model_(
         radar_settings.receiver_noiselevel_stddev,
         radar_settings.receiver_noiselevel_mean,
         radar_settings.receiver_noise_distribution_stddev, random_seed) {
+            last_metrics_.resize(dynamics_.size());
             default_probe_state_ = prepareDefaultProbeState(ProbeSettings{});
         }
 
@@ -42,13 +57,20 @@ RadarSimulator::RadarSimulator(const ProblemDescription &description)
             const RadarSettings &radar_settings, const CarSettings &car_settings,
             const FloorplaneClutterSettings &floorplane_settings,
             std::uint32_t random_seed)
+        : RadarSimulator(radar_settings, CarList{car_settings}, floorplane_settings, random_seed) {}
+
+        RadarSimulator::RadarSimulator(
+            const RadarSettings &radar_settings, const CarList &car_settings,
+            const FloorplaneClutterSettings &floorplane_settings,
+            std::uint32_t random_seed)
         : radar_settings_(radar_settings),
-        dynamics_(car_settings),
+        dynamics_(makeDynamics(car_settings)),
         environment_(radar_settings, floorplane_settings),
         receiver_noise_model_(
             radar_settings.receiver_noiselevel_stddev,
             radar_settings.receiver_noiselevel_mean,
             radar_settings.receiver_noise_distribution_stddev, random_seed) {
+                last_metrics_.resize(dynamics_.size());
                 default_probe_state_ = prepareDefaultProbeState(problem::ProbeSettings{});
             }
 

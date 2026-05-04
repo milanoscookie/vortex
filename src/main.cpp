@@ -214,9 +214,13 @@ namespace {
 
 int main(int argc, char **argv) {
     try {
-        const RuntimeOptions runtime_options = parseRuntimeOptions(argc, argv);
+        /*
+        parseRuntimeOptions(argc, argv);
         const auto output_dir = std::filesystem::path("output");
         const OutputPaths output_paths = makeOutputPaths(output_dir);
+        */
+
+        parseRuntimeOptions(argc, argv);
 
         const problem::ProblemDescription description =
             problem::kDefaultProblemDescription;
@@ -230,6 +234,7 @@ int main(int argc, char **argv) {
         const std::vector<Complex> tx_chirp = computeChirpRef(radar_settings);
         RadarSimulator::ElementVector step_output;
 
+        /*
         writeComplexBinary(output_paths.tx_chirp_binary, tx_chirp);
 
         std::ofstream rx_out = openOutputFile(output_paths.rx_burst_binary,
@@ -241,42 +246,54 @@ int main(int argc, char **argv) {
             truth_out = openOutputFile(output_paths.truth_csv, std::ios::out, "truth csv");
             writeTruthHeader(truth_out);
         }
+        */
 
+        /*
         std::vector<Complex> batch_buffer(
             kWriteBatchSize * RadarSimulator::kBlockSize *
             problem::RadarSettings::kProbeNumElements);
+        */
 
         for (std::size_t batch_start = 0; batch_start < chirp_count;
             batch_start += kWriteBatchSize) {
                 const std::size_t current_batch_size =
                     std::min(kWriteBatchSize, chirp_count - batch_start);
+                /*
                 std::string truth_buffer;
                 if (runtime_options.write_truth_csv) {
                     truth_buffer.reserve(current_batch_size * 128);
                 }
+                */
 
                 for (std::size_t b = 0; b < current_batch_size; ++b) {
+                    /*
                     const std::size_t chirp_idx = batch_start + b;
                     Complex *chirp_ptr =
                         batch_buffer.data() +
                         b * RadarSimulator::kBlockSize *
                         problem::RadarSettings::kProbeNumElements;
+                    */
 
                     for (std::size_t sample_index = 0; sample_index < RadarSimulator::kBlockSize;
                         ++sample_index) {
                             simulator.step<problem::RadarSettings::kProbeNumX,
                                 problem::RadarSettings::kProbeNumY>(
                                     probe_state, step_output, tx_chirp[sample_index]);
+                                /*
                                 std::memcpy(
                                     chirp_ptr + sample_index * problem::RadarSettings::kProbeNumElements,
                                     step_output.data(),
                                     sizeof(Complex) * problem::RadarSettings::kProbeNumElements);
+                                */
                         }
+                    /*
                     if (runtime_options.write_truth_csv) {
                         appendTruthRow(truth_buffer, chirp_idx, simulator.lastMetrics());
                     }
+                    */
                 }
 
+                /*
                 rx_out.write(reinterpret_cast<const char *>(batch_buffer.data()),
                     static_cast<std::streamsize>(
                         current_batch_size * RadarSimulator::kBlockSize *
@@ -286,10 +303,13 @@ int main(int argc, char **argv) {
                     truth_out.write(truth_buffer.data(),
                         static_cast<std::streamsize>(truth_buffer.size()));
                 }
+                */
             }
 
+        /*
         writeKeyValueCsv(output_paths.metadata_csv,
             buildMetadataRows(description, chirp_count, output_paths));
+        */
 
         std::cout << "Optimized simulation complete (Batch I/O Enabled).\n";
     } catch (const std::exception &ex) {

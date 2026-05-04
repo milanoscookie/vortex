@@ -5,6 +5,7 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace problem {
 
@@ -96,9 +97,31 @@ struct ProblemDescription {
     ProbeSettings probe;
     FloorplaneClutterSettings floorplane_clutter;
     SimulatorSettings simulator;
-    CarSettings car;
+    std::vector<CarSettings> cars;
 };
 
-inline const ProblemDescription kDefaultProblemDescription{};
+inline const ProblemDescription kDefaultProblemDescription{
+    .radar = {},
+    .probe = {},
+    .floorplane_clutter = {},
+    .simulator = {.vehicle_count = 3},
+    .cars = {
+        CarSettings{
+            .reflectivity = std::polar(1.0f, 3.1f),
+        },
+        CarSettings{
+            .reflectivity = std::polar(1.0f, 3.1f),
+        },
+        CarSettings{
+            .initial_position_m = Vec3(100.0f, 100.0f, 150.0f),
+            .base_velocity_mps = Vec3(20.0f, 20.0f, 0.0f),
+            .yaw_rad = 0.3f,
+            .bounce_amplitude_m = 0.002f,
+            .bounce_frequency_hz = 4.0f,
+            .bounce_phase_rad = 1.1f,
+            .reflectivity = std::polar(0.9f, 0.4f),
+        }
+    }
+};
 
-} // namespace problem
+}// namespace problem
