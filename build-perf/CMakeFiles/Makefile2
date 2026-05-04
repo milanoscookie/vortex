@@ -162,12 +162,12 @@ tests/clean: tests/CMakeFiles/vortex_test_linear_system.dir/clean
 src/CMakeFiles/Vortex.dir/all:
 	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/depend
 	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=1,2,3,4,5 "Built target Vortex"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=1,2,3,4,5,6 "Built target Vortex"
 .PHONY : src/CMakeFiles/Vortex.dir/all
 
 # Build rule for subdir invocation for target.
 src/CMakeFiles/Vortex.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/CMakeFiles/Vortex.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles 0
 .PHONY : src/CMakeFiles/Vortex.dir/rule
@@ -179,7 +179,7 @@ Vortex: src/CMakeFiles/Vortex.dir/rule
 # codegen rule for target.
 src/CMakeFiles/Vortex.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=1,2,3,4,5 "Finished codegen for target Vortex"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=1,2,3,4,5,6 "Finished codegen for target Vortex"
 .PHONY : src/CMakeFiles/Vortex.dir/codegen
 
 # clean rule for target.
@@ -194,7 +194,7 @@ src/CMakeFiles/Vortex.dir/clean:
 tests/CMakeFiles/vortex_test_ring_buffer.dir/all:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_ring_buffer.dir/build.make tests/CMakeFiles/vortex_test_ring_buffer.dir/depend
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_ring_buffer.dir/build.make tests/CMakeFiles/vortex_test_ring_buffer.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=14,15 "Built target vortex_test_ring_buffer"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=15,16 "Built target vortex_test_ring_buffer"
 .PHONY : tests/CMakeFiles/vortex_test_ring_buffer.dir/all
 
 # Build rule for subdir invocation for target.
@@ -211,7 +211,7 @@ vortex_test_ring_buffer: tests/CMakeFiles/vortex_test_ring_buffer.dir/rule
 # codegen rule for target.
 tests/CMakeFiles/vortex_test_ring_buffer.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_ring_buffer.dir/build.make tests/CMakeFiles/vortex_test_ring_buffer.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=14,15 "Finished codegen for target vortex_test_ring_buffer"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=15,16 "Finished codegen for target vortex_test_ring_buffer"
 .PHONY : tests/CMakeFiles/vortex_test_ring_buffer.dir/codegen
 
 # clean rule for target.
@@ -226,7 +226,7 @@ tests/CMakeFiles/vortex_test_ring_buffer.dir/clean:
 tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/all:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/build.make tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/depend
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/build.make tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=6,7 "Built target vortex_test_double_buffer_spsc"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=7,8 "Built target vortex_test_double_buffer_spsc"
 .PHONY : tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/all
 
 # Build rule for subdir invocation for target.
@@ -243,7 +243,7 @@ vortex_test_double_buffer_spsc: tests/CMakeFiles/vortex_test_double_buffer_spsc.
 # codegen rule for target.
 tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/build.make tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=6,7 "Finished codegen for target vortex_test_double_buffer_spsc"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=7,8 "Finished codegen for target vortex_test_double_buffer_spsc"
 .PHONY : tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/codegen
 
 # clean rule for target.
@@ -258,7 +258,7 @@ tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/clean:
 tests/CMakeFiles/vortex_test_iir_filter.dir/all:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_iir_filter.dir/build.make tests/CMakeFiles/vortex_test_iir_filter.dir/depend
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_iir_filter.dir/build.make tests/CMakeFiles/vortex_test_iir_filter.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=8,9 "Built target vortex_test_iir_filter"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=9,10 "Built target vortex_test_iir_filter"
 .PHONY : tests/CMakeFiles/vortex_test_iir_filter.dir/all
 
 # Build rule for subdir invocation for target.
@@ -275,7 +275,7 @@ vortex_test_iir_filter: tests/CMakeFiles/vortex_test_iir_filter.dir/rule
 # codegen rule for target.
 tests/CMakeFiles/vortex_test_iir_filter.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_iir_filter.dir/build.make tests/CMakeFiles/vortex_test_iir_filter.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=8,9 "Finished codegen for target vortex_test_iir_filter"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=9,10 "Finished codegen for target vortex_test_iir_filter"
 .PHONY : tests/CMakeFiles/vortex_test_iir_filter.dir/codegen
 
 # clean rule for target.
@@ -290,7 +290,7 @@ tests/CMakeFiles/vortex_test_iir_filter.dir/clean:
 tests/CMakeFiles/vortex_test_lp_butterworth.dir/all:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_lp_butterworth.dir/build.make tests/CMakeFiles/vortex_test_lp_butterworth.dir/depend
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_lp_butterworth.dir/build.make tests/CMakeFiles/vortex_test_lp_butterworth.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=12,13 "Built target vortex_test_lp_butterworth"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=13,14 "Built target vortex_test_lp_butterworth"
 .PHONY : tests/CMakeFiles/vortex_test_lp_butterworth.dir/all
 
 # Build rule for subdir invocation for target.
@@ -307,7 +307,7 @@ vortex_test_lp_butterworth: tests/CMakeFiles/vortex_test_lp_butterworth.dir/rule
 # codegen rule for target.
 tests/CMakeFiles/vortex_test_lp_butterworth.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_lp_butterworth.dir/build.make tests/CMakeFiles/vortex_test_lp_butterworth.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=12,13 "Finished codegen for target vortex_test_lp_butterworth"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=13,14 "Finished codegen for target vortex_test_lp_butterworth"
 .PHONY : tests/CMakeFiles/vortex_test_lp_butterworth.dir/codegen
 
 # clean rule for target.
@@ -322,7 +322,7 @@ tests/CMakeFiles/vortex_test_lp_butterworth.dir/clean:
 tests/CMakeFiles/vortex_test_linear_system.dir/all:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_linear_system.dir/build.make tests/CMakeFiles/vortex_test_linear_system.dir/depend
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_linear_system.dir/build.make tests/CMakeFiles/vortex_test_linear_system.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=10,11 "Built target vortex_test_linear_system"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=11,12 "Built target vortex_test_linear_system"
 .PHONY : tests/CMakeFiles/vortex_test_linear_system.dir/all
 
 # Build rule for subdir invocation for target.
@@ -339,7 +339,7 @@ vortex_test_linear_system: tests/CMakeFiles/vortex_test_linear_system.dir/rule
 # codegen rule for target.
 tests/CMakeFiles/vortex_test_linear_system.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_linear_system.dir/build.make tests/CMakeFiles/vortex_test_linear_system.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=10,11 "Finished codegen for target vortex_test_linear_system"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=11,12 "Finished codegen for target vortex_test_linear_system"
 .PHONY : tests/CMakeFiles/vortex_test_linear_system.dir/codegen
 
 # clean rule for target.

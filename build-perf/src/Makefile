@@ -236,6 +236,30 @@ main.cpp.s:
 	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/main.cpp.s
 .PHONY : main.cpp.s
 
+radar_algo.o: radar_algo.cpp.o
+.PHONY : radar_algo.o
+
+# target to build an object file
+radar_algo.cpp.o:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/radar_algo.cpp.o
+.PHONY : radar_algo.cpp.o
+
+radar_algo.i: radar_algo.cpp.i
+.PHONY : radar_algo.i
+
+# target to preprocess a source file
+radar_algo.cpp.i:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/radar_algo.cpp.i
+.PHONY : radar_algo.cpp.i
+
+radar_algo.s: radar_algo.cpp.s
+.PHONY : radar_algo.s
+
+# target to generate assembly for a file
+radar_algo.cpp.s:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/radar_algo.cpp.s
+.PHONY : radar_algo.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -258,6 +282,9 @@ help:
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"
+	@echo "... radar_algo.o"
+	@echo "... radar_algo.i"
+	@echo "... radar_algo.s"
 .PHONY : help
 
 

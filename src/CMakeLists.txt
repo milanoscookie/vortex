@@ -1,6 +1,7 @@
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_executable(Vortex
   main.cpp
+  radar_algo.cpp
   ${VORTEX_CORE_SOURCES}
 )
 

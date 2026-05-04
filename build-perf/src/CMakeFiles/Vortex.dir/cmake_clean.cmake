@@ -8,6 +8,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o.d"
   "CMakeFiles/Vortex.dir/main.cpp.o"
   "CMakeFiles/Vortex.dir/main.cpp.o.d"
+  "CMakeFiles/Vortex.dir/radar_algo.cpp.o"
+  "CMakeFiles/Vortex.dir/radar_algo.cpp.o.d"
   "Vortex"
   "Vortex.pdb"
 )

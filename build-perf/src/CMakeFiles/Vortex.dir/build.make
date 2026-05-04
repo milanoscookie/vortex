@@ -86,10 +86,24 @@ src/CMakeFiles/Vortex.dir/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/Vortex.dir/main.cpp.s"
 	cd /home/milan/Documents/DSPClass/radar/build-perf/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/milan/Documents/DSPClass/radar/src/main.cpp -o CMakeFiles/Vortex.dir/main.cpp.s
 
+src/CMakeFiles/Vortex.dir/radar_algo.cpp.o: src/CMakeFiles/Vortex.dir/flags.make
+src/CMakeFiles/Vortex.dir/radar_algo.cpp.o: /home/milan/Documents/DSPClass/radar/src/radar_algo.cpp
+src/CMakeFiles/Vortex.dir/radar_algo.cpp.o: src/CMakeFiles/Vortex.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object src/CMakeFiles/Vortex.dir/radar_algo.cpp.o"
+	cd /home/milan/Documents/DSPClass/radar/build-perf/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/CMakeFiles/Vortex.dir/radar_algo.cpp.o -MF CMakeFiles/Vortex.dir/radar_algo.cpp.o.d -o CMakeFiles/Vortex.dir/radar_algo.cpp.o -c /home/milan/Documents/DSPClass/radar/src/radar_algo.cpp
+
+src/CMakeFiles/Vortex.dir/radar_algo.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/Vortex.dir/radar_algo.cpp.i"
+	cd /home/milan/Documents/DSPClass/radar/build-perf/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/milan/Documents/DSPClass/radar/src/radar_algo.cpp > CMakeFiles/Vortex.dir/radar_algo.cpp.i
+
+src/CMakeFiles/Vortex.dir/radar_algo.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/Vortex.dir/radar_algo.cpp.s"
+	cd /home/milan/Documents/DSPClass/radar/build-perf/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/milan/Documents/DSPClass/radar/src/radar_algo.cpp -o CMakeFiles/Vortex.dir/radar_algo.cpp.s
+
 src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o: src/CMakeFiles/Vortex.dir/flags.make
 src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o: /home/milan/Documents/DSPClass/radar/lib/dynamics.cpp
 src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o: src/CMakeFiles/Vortex.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o"
 	cd /home/milan/Documents/DSPClass/radar/build-perf/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o -MF CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o.d -o CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o -c /home/milan/Documents/DSPClass/radar/lib/dynamics.cpp
 
 src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.i: cmake_force
@@ -103,7 +117,7 @@ src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.s: cmake_force
 src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.o: src/CMakeFiles/Vortex.dir/flags.make
 src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.o: /home/milan/Documents/DSPClass/radar/lib/environment.cpp
 src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.o: src/CMakeFiles/Vortex.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.o"
 	cd /home/milan/Documents/DSPClass/radar/build-perf/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.o -MF CMakeFiles/Vortex.dir/__/lib/environment.cpp.o.d -o CMakeFiles/Vortex.dir/__/lib/environment.cpp.o -c /home/milan/Documents/DSPClass/radar/lib/environment.cpp
 
 src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.i: cmake_force
@@ -117,7 +131,7 @@ src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.s: cmake_force
 src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o: src/CMakeFiles/Vortex.dir/flags.make
 src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o: /home/milan/Documents/DSPClass/radar/lib/simulation.cpp
 src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o: src/CMakeFiles/Vortex.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o"
 	cd /home/milan/Documents/DSPClass/radar/build-perf/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o -MF CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o.d -o CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o -c /home/milan/Documents/DSPClass/radar/lib/simulation.cpp
 
 src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.i: cmake_force
@@ -131,6 +145,7 @@ src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.s: cmake_force
 # Object files for target Vortex
 Vortex_OBJECTS = \
 "CMakeFiles/Vortex.dir/main.cpp.o" \
+"CMakeFiles/Vortex.dir/radar_algo.cpp.o" \
 "CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o" \
 "CMakeFiles/Vortex.dir/__/lib/environment.cpp.o" \
 "CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o"
@@ -139,13 +154,14 @@ Vortex_OBJECTS = \
 Vortex_EXTERNAL_OBJECTS =
 
 src/Vortex: src/CMakeFiles/Vortex.dir/main.cpp.o
+src/Vortex: src/CMakeFiles/Vortex.dir/radar_algo.cpp.o
 src/Vortex: src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o
 src/Vortex: src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.o
 src/Vortex: src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o
 src/Vortex: src/CMakeFiles/Vortex.dir/build.make
 src/Vortex: src/CMakeFiles/Vortex.dir/compiler_depend.ts
 src/Vortex: src/CMakeFiles/Vortex.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable Vortex"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/milan/Documents/DSPClass/radar/build-perf/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Linking CXX executable Vortex"
 	cd /home/milan/Documents/DSPClass/radar/build-perf/src && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/Vortex.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

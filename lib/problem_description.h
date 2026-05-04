@@ -107,9 +107,11 @@ inline const ProblemDescription kDefaultProblemDescription{
     .simulator = {.vehicle_count = 3},
     .cars = {
         CarSettings{
+            .initial_position_m = Vec3(107.0f, 107.0f, 150.0f),
             .reflectivity = std::polar(1.0f, 3.1f),
         },
         CarSettings{
+            .initial_position_m = Vec3(114.0f, 114.0f, 150.0f),
             .reflectivity = std::polar(1.0f, 3.1f),
         },
         CarSettings{
