@@ -1,0 +1,23 @@
+Start testing: May 04 13:37 CDT
+----------------------------------------------------------
+6/6 Testing: vortex_test_fmcw_tracker
+6/6 Test: vortex_test_fmcw_tracker
+Command: "/home/milan/Documents/DSPClass/radar/build-perf/tests/vortex_test_fmcw_tracker"
+Directory: /home/milan/Documents/DSPClass/radar/build-perf/tests
+"vortex_test_fmcw_tracker" start time: May 04 13:37 CDT
+Output:
+----------------------------------------------------------
+
+--- Results ---
+  ✓ single_target_raw_position_tracks_truth
+
+1 tests, 0 failures
+<end of output>
+Test time =   0.94 sec
+----------------------------------------------------------
+Test Passed.
+"vortex_test_fmcw_tracker" end time: May 04 13:37 CDT
+"vortex_test_fmcw_tracker" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: May 04 13:37 CDT

@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/_deps/eigen
+CXX_INCLUDES = -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/_deps/eigen -I/home/milan/Documents/DSPClass/radar/src
 
 CXX_FLAGS = -O2 -g -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fno-omit-frame-pointer
 

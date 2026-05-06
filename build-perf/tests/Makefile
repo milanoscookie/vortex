@@ -196,6 +196,20 @@ vortex_test_linear_system/fast:
 	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_linear_system.dir/build.make tests/CMakeFiles/vortex_test_linear_system.dir/build
 .PHONY : vortex_test_linear_system/fast
 
+# Convenience name for target.
+tests/CMakeFiles/vortex_test_fmcw_tracker.dir/rule:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tests/CMakeFiles/vortex_test_fmcw_tracker.dir/rule
+.PHONY : tests/CMakeFiles/vortex_test_fmcw_tracker.dir/rule
+
+# Convenience name for target.
+vortex_test_fmcw_tracker: tests/CMakeFiles/vortex_test_fmcw_tracker.dir/rule
+.PHONY : vortex_test_fmcw_tracker
+
+# fast build rule for target.
+vortex_test_fmcw_tracker/fast:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build.make tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build
+.PHONY : vortex_test_fmcw_tracker/fast
+
 vortex_test_double_buffer_spsc.o: vortex_test_double_buffer_spsc.cpp.o
 .PHONY : vortex_test_double_buffer_spsc.o
 
@@ -219,6 +233,30 @@ vortex_test_double_buffer_spsc.s: vortex_test_double_buffer_spsc.cpp.s
 vortex_test_double_buffer_spsc.cpp.s:
 	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/build.make tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/vortex_test_double_buffer_spsc.cpp.s
 .PHONY : vortex_test_double_buffer_spsc.cpp.s
+
+vortex_test_fmcw_tracker.o: vortex_test_fmcw_tracker.cpp.o
+.PHONY : vortex_test_fmcw_tracker.o
+
+# target to build an object file
+vortex_test_fmcw_tracker.cpp.o:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build.make tests/CMakeFiles/vortex_test_fmcw_tracker.dir/vortex_test_fmcw_tracker.cpp.o
+.PHONY : vortex_test_fmcw_tracker.cpp.o
+
+vortex_test_fmcw_tracker.i: vortex_test_fmcw_tracker.cpp.i
+.PHONY : vortex_test_fmcw_tracker.i
+
+# target to preprocess a source file
+vortex_test_fmcw_tracker.cpp.i:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build.make tests/CMakeFiles/vortex_test_fmcw_tracker.dir/vortex_test_fmcw_tracker.cpp.i
+.PHONY : vortex_test_fmcw_tracker.cpp.i
+
+vortex_test_fmcw_tracker.s: vortex_test_fmcw_tracker.cpp.s
+.PHONY : vortex_test_fmcw_tracker.s
+
+# target to generate assembly for a file
+vortex_test_fmcw_tracker.cpp.s:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build.make tests/CMakeFiles/vortex_test_fmcw_tracker.dir/vortex_test_fmcw_tracker.cpp.s
+.PHONY : vortex_test_fmcw_tracker.cpp.s
 
 vortex_test_iir_filter.o: vortex_test_iir_filter.cpp.o
 .PHONY : vortex_test_iir_filter.o
@@ -326,6 +364,7 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... test"
 	@echo "... vortex_test_double_buffer_spsc"
+	@echo "... vortex_test_fmcw_tracker"
 	@echo "... vortex_test_iir_filter"
 	@echo "... vortex_test_linear_system"
 	@echo "... vortex_test_lp_butterworth"
@@ -333,6 +372,9 @@ help:
 	@echo "... vortex_test_double_buffer_spsc.o"
 	@echo "... vortex_test_double_buffer_spsc.i"
 	@echo "... vortex_test_double_buffer_spsc.s"
+	@echo "... vortex_test_fmcw_tracker.o"
+	@echo "... vortex_test_fmcw_tracker.i"
+	@echo "... vortex_test_fmcw_tracker.s"
 	@echo "... vortex_test_iir_filter.o"
 	@echo "... vortex_test_iir_filter.i"
 	@echo "... vortex_test_iir_filter.s"

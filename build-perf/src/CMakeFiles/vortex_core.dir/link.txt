@@ -1,0 +1,2 @@
+"/usr/bin/gcc-ar" qc libvortex_core.a CMakeFiles/vortex_core.dir/fmcw_tracker.cpp.o CMakeFiles/vortex_core.dir/radar_algo.cpp.o CMakeFiles/vortex_core.dir/__/lib/dynamics.cpp.o CMakeFiles/vortex_core.dir/__/lib/environment.cpp.o CMakeFiles/vortex_core.dir/__/lib/simulation.cpp.o
+"/usr/bin/gcc-ranlib" libvortex_core.a

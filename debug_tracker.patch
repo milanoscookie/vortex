@@ -1,0 +1,8 @@
+--- src/main.cpp
++++ src/main.cpp
+@@ -165,2 +165,6 @@
+                   << "dir=" << formatVec3(first_estimate.direction) << '\n';
++        std::cout << "Tracker rbin=0 is " << tracker.rangeAxis()[0] << " m\n";
++        std::cout << "Tracker rbin=930 is " << tracker.rangeAxis()[930] << " m\n";
++        std::cout << "Tracker slope=" << tracker.radarConfig().chirpSlopeHzPerS() << " Hz/s\n";
++        std::cout << "Tracker size=" << tracker.rangeAxis().size() << "\n";

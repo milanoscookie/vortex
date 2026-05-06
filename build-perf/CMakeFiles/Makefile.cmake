@@ -60,10 +60,12 @@ set(CMAKE_MAKEFILE_PRODUCTS
 
 # Dependency information for all targets:
 set(CMAKE_DEPEND_INFO_FILES
+  "src/CMakeFiles/vortex_core.dir/DependInfo.cmake"
   "src/CMakeFiles/Vortex.dir/DependInfo.cmake"
   "tests/CMakeFiles/vortex_test_ring_buffer.dir/DependInfo.cmake"
   "tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/DependInfo.cmake"
   "tests/CMakeFiles/vortex_test_iir_filter.dir/DependInfo.cmake"
   "tests/CMakeFiles/vortex_test_lp_butterworth.dir/DependInfo.cmake"
   "tests/CMakeFiles/vortex_test_linear_system.dir/DependInfo.cmake"
+  "tests/CMakeFiles/vortex_test_fmcw_tracker.dir/DependInfo.cmake"
   )

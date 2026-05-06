@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <cmath>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -55,6 +56,33 @@ problem::Vec3 meanVec3(const std::vector<problem::Vec3> &values) {
     return mean / static_cast<float>(values.size());
 }
 
+float rmseVec3(const std::vector<problem::Vec3> &estimates,
+               const std::vector<problem::SimulationMetrics> &truth) {
+    if (estimates.empty() || estimates.size() != truth.size()) {
+        return 0.0f;
+    }
+
+    float squared_error_sum = 0.0f;
+    for (std::size_t i = 0; i < estimates.size(); ++i) {
+        squared_error_sum += (estimates[i] - truth[i].position_m).squaredNorm();
+    }
+    return std::sqrt(squared_error_sum / static_cast<float>(estimates.size()));
+}
+
+float rmseRange(const std::vector<float> &ranges_m,
+                const std::vector<problem::SimulationMetrics> &truth) {
+    if (ranges_m.empty() || ranges_m.size() != truth.size()) {
+        return 0.0f;
+    }
+
+    float squared_error_sum = 0.0f;
+    for (std::size_t i = 0; i < ranges_m.size(); ++i) {
+        const float error_m = ranges_m[i] - truth[i].range_m;
+        squared_error_sum += error_m * error_m;
+    }
+    return std::sqrt(squared_error_sum / static_cast<float>(ranges_m.size()));
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -97,10 +125,12 @@ int main(int argc, char **argv) {
                       << "xyz=" << formatVec3(first_truth.position_m) << '\n';
         }
 
-        std::cout << "Mean smoothed XYZ: "
-                  << formatVec3(meanVec3(summary.smoothed_positions_m)) << '\n';
         std::cout << "Mean Cartesian velocity: "
                   << formatVec3(meanVec3(summary.cartesian_velocity_mps)) << " m/s\n";
+        std::cout << "RMSE raw XYZ: "
+                  << rmseVec3(summary.raw_positions_m, summary.truth_metrics) << " m\n";
+        std::cout << "RMSE range: "
+                  << rmseRange(summary.ranges_m, summary.truth_metrics) << " m\n";
     } catch (const std::exception &ex) {
         std::cerr << "Radar demo failed: " << ex.what() << '\n';
         return 1;

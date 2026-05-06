@@ -13,9 +13,6 @@ namespace {
 using Probe64 =
     Probe<problem::RadarSettings::kProbeNumX, problem::RadarSettings::kProbeNumY>;
 
-constexpr std::size_t kInitialTrackingBatchCount = 11;
-constexpr std::size_t kInitialTrackingCpiChirps = 64;
-
 Complex cis(float phase_rad) {
     return {std::cos(phase_rad), std::sin(phase_rad)};
 }
@@ -75,12 +72,6 @@ makeSingleTargetTrackingDescription(const problem::ProblemDescription &base) {
     description.radar.receiver_noiselevel_stddev = 0.0f;
     description.radar.receiver_noiselevel_mean = 0.0f;
     description.radar.receiver_noise_distribution_stddev = 0.0f;
-
-    const float chirp_duration_s =
-        static_cast<float>(RadarSimulator::kBlockSize) / description.radar.sample_rate_hz;
-    description.simulator.burst_duration_s =
-        static_cast<float>(kInitialTrackingBatchCount * kInitialTrackingCpiChirps) *
-        chirp_duration_s;
 
     return description;
 }

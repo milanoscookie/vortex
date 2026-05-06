@@ -48,7 +48,9 @@ RadarSimulator::RadarSimulator(const RadarSettings &radar_settings,
     receiver_noise_model_(
         radar_settings.receiver_noiselevel_stddev,
         radar_settings.receiver_noiselevel_mean,
-        radar_settings.receiver_noise_distribution_stddev, random_seed) {
+        radar_settings.receiver_noise_distribution_stddev,
+        radar_settings.receiver_noise_use_std_normal_distribution,
+        random_seed) {
             last_metrics_.resize(dynamics_.size());
             default_probe_state_ = prepareDefaultProbeState(ProbeSettings{});
         }
@@ -69,7 +71,9 @@ RadarSimulator::RadarSimulator(const RadarSettings &radar_settings,
         receiver_noise_model_(
             radar_settings.receiver_noiselevel_stddev,
             radar_settings.receiver_noiselevel_mean,
-            radar_settings.receiver_noise_distribution_stddev, random_seed) {
+            radar_settings.receiver_noise_distribution_stddev,
+            radar_settings.receiver_noise_use_std_normal_distribution,
+            random_seed) {
                 last_metrics_.resize(dynamics_.size());
                 default_probe_state_ = prepareDefaultProbeState(problem::ProbeSettings{});
             }

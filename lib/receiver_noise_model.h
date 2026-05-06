@@ -8,6 +8,7 @@
 #include <cmath>
 #include <complex>
 #include <cstdint>
+#include <random>
 
 namespace radar {
 
@@ -18,10 +19,14 @@ class ReceiverNoiseModel {
     ReceiverNoiseModel(float receiver_noiselevel_stddev,
                        float receiver_noiselevel_mean,
                        float receiver_noise_distribution_stddev,
+                       bool use_std_normal_distribution,
                        std::uint32_t random_seed)
         : receiver_noiselevel_stddev_(receiver_noiselevel_stddev),
           receiver_noise_distribution_mean_(receiver_noiselevel_mean),
-          receiver_noise_distribution_stddev_(receiver_noise_distribution_stddev) {
+          receiver_noise_distribution_stddev_(receiver_noise_distribution_stddev),
+          use_std_normal_distribution_(use_std_normal_distribution),
+          std_rng_(random_seed),
+          std_normal_(0.0f, 1.0f) {
         updateDerivedConstants();
         seedRng(random_seed);
     }
@@ -101,6 +106,9 @@ class ReceiverNoiseModel {
     }
 
     float sampleStandardNormal() noexcept {
+        if (use_std_normal_distribution_) {
+            return std_normal_(std_rng_);
+        }
         const unsigned bit_count = std::popcount(sampleUint32()) + std::popcount(sampleUint32()) +
                                    std::popcount(sampleUint32());
         return (static_cast<float>(bit_count) - kPopcountNormalMean) * kPopcountNormalScale;
@@ -111,7 +119,10 @@ class ReceiverNoiseModel {
     float receiver_noise_distribution_stddev_ = 1.0f;
     float effective_sigma_ = 0.0f;
     bool noise_enabled_ = false;
+    bool use_std_normal_distribution_ = false;
     std::array<std::uint32_t, 4> rng_state_{};
+    std::mt19937 std_rng_;
+    std::normal_distribution<float> std_normal_;
 };
 
 } // namespace radar

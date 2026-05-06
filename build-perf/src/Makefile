@@ -127,6 +127,20 @@ depend:
 .PHONY : depend
 
 # Convenience name for target.
+src/CMakeFiles/vortex_core.dir/rule:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/CMakeFiles/vortex_core.dir/rule
+.PHONY : src/CMakeFiles/vortex_core.dir/rule
+
+# Convenience name for target.
+vortex_core: src/CMakeFiles/vortex_core.dir/rule
+.PHONY : vortex_core
+
+# fast build rule for target.
+vortex_core/fast:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/build
+.PHONY : vortex_core/fast
+
+# Convenience name for target.
 src/CMakeFiles/Vortex.dir/rule:
 	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/CMakeFiles/Vortex.dir/rule
 .PHONY : src/CMakeFiles/Vortex.dir/rule
@@ -145,7 +159,7 @@ __/lib/dynamics.o: __/lib/dynamics.cpp.o
 
 # target to build an object file
 __/lib/dynamics.cpp.o:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.o
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/dynamics.cpp.o
 .PHONY : __/lib/dynamics.cpp.o
 
 __/lib/dynamics.i: __/lib/dynamics.cpp.i
@@ -153,7 +167,7 @@ __/lib/dynamics.i: __/lib/dynamics.cpp.i
 
 # target to preprocess a source file
 __/lib/dynamics.cpp.i:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.i
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/dynamics.cpp.i
 .PHONY : __/lib/dynamics.cpp.i
 
 __/lib/dynamics.s: __/lib/dynamics.cpp.s
@@ -161,7 +175,7 @@ __/lib/dynamics.s: __/lib/dynamics.cpp.s
 
 # target to generate assembly for a file
 __/lib/dynamics.cpp.s:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/dynamics.cpp.s
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/dynamics.cpp.s
 .PHONY : __/lib/dynamics.cpp.s
 
 __/lib/environment.o: __/lib/environment.cpp.o
@@ -169,7 +183,7 @@ __/lib/environment.o: __/lib/environment.cpp.o
 
 # target to build an object file
 __/lib/environment.cpp.o:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.o
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/environment.cpp.o
 .PHONY : __/lib/environment.cpp.o
 
 __/lib/environment.i: __/lib/environment.cpp.i
@@ -177,7 +191,7 @@ __/lib/environment.i: __/lib/environment.cpp.i
 
 # target to preprocess a source file
 __/lib/environment.cpp.i:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.i
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/environment.cpp.i
 .PHONY : __/lib/environment.cpp.i
 
 __/lib/environment.s: __/lib/environment.cpp.s
@@ -185,7 +199,7 @@ __/lib/environment.s: __/lib/environment.cpp.s
 
 # target to generate assembly for a file
 __/lib/environment.cpp.s:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/environment.cpp.s
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/environment.cpp.s
 .PHONY : __/lib/environment.cpp.s
 
 __/lib/simulation.o: __/lib/simulation.cpp.o
@@ -193,7 +207,7 @@ __/lib/simulation.o: __/lib/simulation.cpp.o
 
 # target to build an object file
 __/lib/simulation.cpp.o:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.o
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/simulation.cpp.o
 .PHONY : __/lib/simulation.cpp.o
 
 __/lib/simulation.i: __/lib/simulation.cpp.i
@@ -201,7 +215,7 @@ __/lib/simulation.i: __/lib/simulation.cpp.i
 
 # target to preprocess a source file
 __/lib/simulation.cpp.i:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.i
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/simulation.cpp.i
 .PHONY : __/lib/simulation.cpp.i
 
 __/lib/simulation.s: __/lib/simulation.cpp.s
@@ -209,7 +223,7 @@ __/lib/simulation.s: __/lib/simulation.cpp.s
 
 # target to generate assembly for a file
 __/lib/simulation.cpp.s:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/__/lib/simulation.cpp.s
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/__/lib/simulation.cpp.s
 .PHONY : __/lib/simulation.cpp.s
 
 fmcw_tracker.o: fmcw_tracker.cpp.o
@@ -217,7 +231,7 @@ fmcw_tracker.o: fmcw_tracker.cpp.o
 
 # target to build an object file
 fmcw_tracker.cpp.o:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/fmcw_tracker.cpp.o
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/fmcw_tracker.cpp.o
 .PHONY : fmcw_tracker.cpp.o
 
 fmcw_tracker.i: fmcw_tracker.cpp.i
@@ -225,7 +239,7 @@ fmcw_tracker.i: fmcw_tracker.cpp.i
 
 # target to preprocess a source file
 fmcw_tracker.cpp.i:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/fmcw_tracker.cpp.i
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/fmcw_tracker.cpp.i
 .PHONY : fmcw_tracker.cpp.i
 
 fmcw_tracker.s: fmcw_tracker.cpp.s
@@ -233,7 +247,7 @@ fmcw_tracker.s: fmcw_tracker.cpp.s
 
 # target to generate assembly for a file
 fmcw_tracker.cpp.s:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/fmcw_tracker.cpp.s
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/fmcw_tracker.cpp.s
 .PHONY : fmcw_tracker.cpp.s
 
 main.o: main.cpp.o
@@ -265,7 +279,7 @@ radar_algo.o: radar_algo.cpp.o
 
 # target to build an object file
 radar_algo.cpp.o:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/radar_algo.cpp.o
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/radar_algo.cpp.o
 .PHONY : radar_algo.cpp.o
 
 radar_algo.i: radar_algo.cpp.i
@@ -273,7 +287,7 @@ radar_algo.i: radar_algo.cpp.i
 
 # target to preprocess a source file
 radar_algo.cpp.i:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/radar_algo.cpp.i
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/radar_algo.cpp.i
 .PHONY : radar_algo.cpp.i
 
 radar_algo.s: radar_algo.cpp.s
@@ -281,7 +295,7 @@ radar_algo.s: radar_algo.cpp.s
 
 # target to generate assembly for a file
 radar_algo.cpp.s:
-	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/radar_algo.cpp.s
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/radar_algo.cpp.s
 .PHONY : radar_algo.cpp.s
 
 # Help Target
@@ -294,6 +308,7 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... test"
 	@echo "... Vortex"
+	@echo "... vortex_core"
 	@echo "... __/lib/dynamics.o"
 	@echo "... __/lib/dynamics.i"
 	@echo "... __/lib/dynamics.s"

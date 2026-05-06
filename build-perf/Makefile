@@ -127,6 +127,19 @@ depend:
 .PHONY : depend
 
 #=============================================================================
+# Target rules for targets named vortex_core
+
+# Build rule for target.
+vortex_core: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vortex_core
+.PHONY : vortex_core
+
+# fast build rule for target.
+vortex_core/fast:
+	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/vortex_core.dir/build.make src/CMakeFiles/vortex_core.dir/build
+.PHONY : vortex_core/fast
+
+#=============================================================================
 # Target rules for targets named Vortex
 
 # Build rule for target.
@@ -204,6 +217,19 @@ vortex_test_linear_system/fast:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_linear_system.dir/build.make tests/CMakeFiles/vortex_test_linear_system.dir/build
 .PHONY : vortex_test_linear_system/fast
 
+#=============================================================================
+# Target rules for targets named vortex_test_fmcw_tracker
+
+# Build rule for target.
+vortex_test_fmcw_tracker: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vortex_test_fmcw_tracker
+.PHONY : vortex_test_fmcw_tracker
+
+# fast build rule for target.
+vortex_test_fmcw_tracker/fast:
+	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build.make tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build
+.PHONY : vortex_test_fmcw_tracker/fast
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -214,7 +240,9 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... test"
 	@echo "... Vortex"
+	@echo "... vortex_core"
 	@echo "... vortex_test_double_buffer_spsc"
+	@echo "... vortex_test_fmcw_tracker"
 	@echo "... vortex_test_iir_filter"
 	@echo "... vortex_test_linear_system"
 	@echo "... vortex_test_lp_butterworth"

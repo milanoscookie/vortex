@@ -32,9 +32,10 @@ struct RadarSettings {
     float max_range_m = 500.0f;
 
     float field_gain = 1.0f;
-    float receiver_noiselevel_stddev = 1e-5f;
+    float receiver_noiselevel_stddev = 0.0f;
     float receiver_noiselevel_mean = 0.0f;
     float receiver_noise_distribution_stddev = 1.0f;
+    bool receiver_noise_use_std_normal_distribution = false;
 };
 
 struct ProbeSettings {
@@ -53,8 +54,8 @@ struct FloorplaneClutterSettings {
 };
 
 struct SimulatorSettings {
-    float burst_duration_s = 1.0f;
-    float tracking_duration_s = 1.00f;
+    float burst_duration_s = 0.10f;
+    float tracking_duration_s = 0.10f;
     float split_duration_s = 15.0f;
     float prediction_duration_s = 15.0f;
     std::uint32_t random_seed = 1U;

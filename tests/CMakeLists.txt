@@ -7,6 +7,7 @@ set(TEST_SOURCES
   vortex_test_iir_filter.cpp
   vortex_test_lp_butterworth.cpp
   vortex_test_linear_system.cpp
+  vortex_test_fmcw_tracker.cpp
 )
 
 foreach(src ${TEST_SOURCES})
@@ -15,7 +16,11 @@ foreach(src ${TEST_SOURCES})
   target_include_directories(${test_name}
     PRIVATE
       ${CMAKE_SOURCE_DIR}/lib
+      ${CMAKE_SOURCE_DIR}/src
       ${CMAKE_SOURCE_DIR}/_deps/eigen
   )
+  if(test_name STREQUAL "vortex_test_fmcw_tracker")
+    target_link_libraries(${test_name} PRIVATE vortex_core)
+  endif()
   add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()

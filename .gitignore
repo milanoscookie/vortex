@@ -1,5 +1,5 @@
 build
-build_perf
+build-perf
 output
 .cache
 perf.data*

@@ -52,7 +52,15 @@ struct DetectionConfig {
     std::size_t azimuth_count = 181;
     float elevation_min_deg = 0.0f;
     float elevation_max_deg = 90.0f;
-    std::size_t elevation_count = 91;
+    std::size_t elevation_count = 10000;
+    std::size_t range_gate_bins = 30;
+    std::size_t doppler_gate_bins = 10;
+    float range_association_sigma_m = 1.0f;
+    float doppler_association_sigma_hz = 800.0f;
+    float doppler_interp_gate_hz = 5000.0f;
+    float range_interp_gate_m = 10.0f;
+    float azimuth_association_sigma_deg = 12.0f;
+    float elevation_association_sigma_deg = 6.0f;
 };
 
 struct BatchResult {
@@ -60,7 +68,17 @@ struct BatchResult {
     float range_m = 0.0f;
     float doppler_hz = 0.0f;
     float phase_rad = 0.0f;
+    float predicted_range_m = 0.0f;
+    float predicted_doppler_hz = 0.0f;
+    float range_bin_offset = 0.0f;
+    float doppler_bin_offset = 0.0f;
+    bool valid = false;
     problem::Vec3 direction = problem::Vec3::Zero();
+    problem::Vec3 predicted_direction = problem::Vec3::Zero();
+    std::size_t range_bin = 0;
+    std::size_t doppler_bin = 0;
+    std::size_t azimuth_bin = 0;
+    std::size_t elevation_bin = 0;
     std::vector<float> doppler_slice_power;
 };
 
@@ -101,8 +119,15 @@ class StreamingTracker {
     TrackSummary buildSummary() const;
 
   private:
-    BatchResult processCurrentWindow(std::size_t start_chirp) const;
+    BatchResult processCurrentWindow(std::size_t start_chirp);
 
+    struct TrackingState {
+        bool initialized = false;
+        float range_m = 0.0f;
+        float radial_velocity_mps = 0.0f;
+        float doppler_hz = 0.0f;
+        problem::Vec3 direction = problem::Vec3::UnitX();
+    };
     problem::ProblemDescription description_;
     RadarConfig radar_config_;
     DetectionConfig detection_config_;
@@ -117,6 +142,8 @@ class StreamingTracker {
     std::vector<Complex> tx_conj_;
     std::deque<std::vector<Complex>> chirp_window_;
     std::vector<BatchResult> batch_results_;
+    TrackingState tracking_state_;
+    std::size_t range_wrap_guard_samples_ = 0;
 };
 
 problem::SimulationMetrics truthAtTime(const problem::ProblemDescription &description,
