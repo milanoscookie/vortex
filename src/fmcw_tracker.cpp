@@ -2891,9 +2891,9 @@ void StreamingTracker::pushChirp(std::size_t chirp_index,
             tracking_state_.position_m + tracking_state_.velocity_mps * dt;
 
         // Ultra-low gains to glide smoothly through AoA grid-snapping noise
-        constexpr float kPositionGain = 0.10f;
-        constexpr float kVelocityGain = 0.001f;
-        constexpr float kRadialVelocityGain = 0.20f;
+        constexpr float kPositionGain = 0.01f;
+        constexpr float kVelocityGain = 0.0001f;
+        constexpr float kRadialVelocityGain = 0.002f;
 
         const Vec3 residual = measured_position - predicted_position;
         tracking_state_.position_m = predicted_position + kPositionGain * residual;
