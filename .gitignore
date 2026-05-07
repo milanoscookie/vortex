@@ -44,3 +44,4 @@ perf.data*
 
 # debug information files
 *.dwo
+/build-perf/src

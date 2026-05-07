@@ -35,7 +35,7 @@ struct RadarSettings {
     float receiver_noiselevel_stddev = 0.0f;
     float receiver_noiselevel_mean = 0.0f;
     float receiver_noise_distribution_stddev = 1.0f;
-    bool receiver_noise_use_std_normal_distribution = false;
+    bool receiver_noise_use_std_normal_distribution = true;
 };
 
 struct ProbeSettings {
@@ -45,7 +45,7 @@ struct ProbeSettings {
 };
 
 struct FloorplaneClutterSettings {
-    bool enable_static_floorplane = true;
+    bool enable_static_floorplane = false;
     float range_m = 100.0f;
     float amplitude_ref = 0.001f;
     float reference_range_m = 100.0f;
@@ -54,8 +54,8 @@ struct FloorplaneClutterSettings {
 };
 
 struct SimulatorSettings {
-    float burst_duration_s = 0.10f;
-    float tracking_duration_s = 0.10f;
+    float burst_duration_s = 1.00f;
+    float tracking_duration_s = 1.00f;
     float split_duration_s = 15.0f;
     float prediction_duration_s = 15.0f;
     std::uint32_t random_seed = 1U;
@@ -70,9 +70,9 @@ struct CarSettings {
     float width_m = 1.8f;
     float height_m = 1.5f;
     float bounce_amplitude_m = 0.01f;  // heavy: 0.002
-    float bounce_frequency_hz = 12.0f; // heavy: 4
-    float bounce_phase_rad = 0.5f;     // each car should be different
-    std::complex<float> reflectivity = std::polar(1.0f, 1.2f);
+    float bounce_frequency_hz = 30.0f; // heavy: 4
+    float bounce_phase_rad = 0.0f;     // each car should be different
+    std::complex<float> reflectivity = std::polar(1.0f, 0.0f);
 };
 
 struct VehicleState {

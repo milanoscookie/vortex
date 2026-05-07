@@ -1,0 +1,74 @@
+[
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/src",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_core.dir/fmcw_tracker.cpp.o -c /home/milan/Documents/DSPClass/radar/src/fmcw_tracker.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/src/fmcw_tracker.cpp",
+  "output": "src/CMakeFiles/vortex_core.dir/fmcw_tracker.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/src",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_core.dir/radar_algo.cpp.o -c /home/milan/Documents/DSPClass/radar/src/radar_algo.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/src/radar_algo.cpp",
+  "output": "src/CMakeFiles/vortex_core.dir/radar_algo.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/src",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_core.dir/__/lib/dynamics.cpp.o -c /home/milan/Documents/DSPClass/radar/lib/dynamics.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/lib/dynamics.cpp",
+  "output": "src/CMakeFiles/vortex_core.dir/__/lib/dynamics.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/src",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_core.dir/__/lib/environment.cpp.o -c /home/milan/Documents/DSPClass/radar/lib/environment.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/lib/environment.cpp",
+  "output": "src/CMakeFiles/vortex_core.dir/__/lib/environment.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/src",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_core.dir/__/lib/simulation.cpp.o -c /home/milan/Documents/DSPClass/radar/lib/simulation.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/lib/simulation.cpp",
+  "output": "src/CMakeFiles/vortex_core.dir/__/lib/simulation.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/src",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/_deps/eigen -I/home/milan/Documents/DSPClass/radar/src -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/Vortex.dir/main.cpp.o -c /home/milan/Documents/DSPClass/radar/src/main.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/src/main.cpp",
+  "output": "src/CMakeFiles/Vortex.dir/main.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/tests",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_test_ring_buffer.dir/vortex_test_ring_buffer.cpp.o -c /home/milan/Documents/DSPClass/radar/tests/vortex_test_ring_buffer.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/tests/vortex_test_ring_buffer.cpp",
+  "output": "tests/CMakeFiles/vortex_test_ring_buffer.dir/vortex_test_ring_buffer.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/tests",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_test_double_buffer_spsc.dir/vortex_test_double_buffer_spsc.cpp.o -c /home/milan/Documents/DSPClass/radar/tests/vortex_test_double_buffer_spsc.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/tests/vortex_test_double_buffer_spsc.cpp",
+  "output": "tests/CMakeFiles/vortex_test_double_buffer_spsc.dir/vortex_test_double_buffer_spsc.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/tests",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_test_iir_filter.dir/vortex_test_iir_filter.cpp.o -c /home/milan/Documents/DSPClass/radar/tests/vortex_test_iir_filter.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/tests/vortex_test_iir_filter.cpp",
+  "output": "tests/CMakeFiles/vortex_test_iir_filter.dir/vortex_test_iir_filter.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/tests",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_test_lp_butterworth.dir/vortex_test_lp_butterworth.cpp.o -c /home/milan/Documents/DSPClass/radar/tests/vortex_test_lp_butterworth.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/tests/vortex_test_lp_butterworth.cpp",
+  "output": "tests/CMakeFiles/vortex_test_lp_butterworth.dir/vortex_test_lp_butterworth.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/tests",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_test_linear_system.dir/vortex_test_linear_system.cpp.o -c /home/milan/Documents/DSPClass/radar/tests/vortex_test_linear_system.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/tests/vortex_test_linear_system.cpp",
+  "output": "tests/CMakeFiles/vortex_test_linear_system.dir/vortex_test_linear_system.cpp.o"
+},
+{
+  "directory": "/home/milan/Documents/DSPClass/radar/build-agent/tests",
+  "command": "/usr/bin/c++  -I/home/milan/Documents/DSPClass/radar/lib -I/home/milan/Documents/DSPClass/radar/src -I/home/milan/Documents/DSPClass/radar/_deps/eigen -O3 -DNDEBUG -std=gnu++23 -flto=auto -fno-fat-lto-objects -O3 -march=native -mtune=native -ffast-math -fno-math-errno -fomit-frame-pointer -o CMakeFiles/vortex_test_fmcw_tracker.dir/vortex_test_fmcw_tracker.cpp.o -c /home/milan/Documents/DSPClass/radar/tests/vortex_test_fmcw_tracker.cpp",
+  "file": "/home/milan/Documents/DSPClass/radar/tests/vortex_test_fmcw_tracker.cpp",
+  "output": "tests/CMakeFiles/vortex_test_fmcw_tracker.dir/vortex_test_fmcw_tracker.cpp.o"
+}
+]

@@ -10,6 +10,8 @@
 namespace radar_algo {
 namespace {
 
+using Complex = std::complex<float>;
+
 using Probe64 =
     Probe<problem::RadarSettings::kProbeNumX, problem::RadarSettings::kProbeNumY>;
 
@@ -27,7 +29,7 @@ std::vector<Complex> computeChirpReference(const problem::RadarSettings &radar_s
                     sample_period_s;
     const float b = -problem::Constants::kPi * radar_settings.bandwidth_hz * sample_period_s;
 
-    Complex sample(1.0f, 0.0f);
+    Complex sample(1.0f, 0.0f) ;
     Complex phase_step = cis(a + b);
     const Complex phase_acceleration = cis(2.0f * a);
 
@@ -68,10 +70,9 @@ makeSingleTargetTrackingDescription(const problem::ProblemDescription &base) {
     description.cars = {description.cars.front()};
     description.simulator.vehicle_count = 1;
     description.simulator.random_seed = 0U;
-    description.floorplane_clutter.enable_static_floorplane = false;
-    description.radar.receiver_noiselevel_stddev = 0.0f;
+    description.radar.receiver_noiselevel_stddev = 1.0e-5f;
     description.radar.receiver_noiselevel_mean = 0.0f;
-    description.radar.receiver_noise_distribution_stddev = 0.0f;
+    description.radar.receiver_noise_distribution_stddev = 1.0f;
 
     return description;
 }

@@ -9,14 +9,14 @@ The current pipeline is:
 
 1. **Scenario definition** (`lib/problem_description.h`)
 2. **Signal generation / simulation** (`lib/simulation.h`, `lib/simulation.cpp`, `lib/dynamics.cpp`, `lib/environment.cpp`)
-3. **Dataset export** (`src/main.cpp`) to:
+3. **Optional dataset export** (`src/main.cpp`) to:
    - `output/tx_chirp.bin`
    - `output/rx_burst.bin`
    - `output/truth.csv`
    - `output/metadata.csv`
-4. **Tracking / estimation** (`tools/fmcw_car_tracker.py`)
+4. **Streaming tracking / estimation** (`src/fmcw_tracker.cpp`, `src/fmcw_tracker.h`)
 
-The Python tracker reads only exported files, not C++ internals.
+The active tracker is the C++ `fmcw_tracker::StreamingTracker`. It consumes chirps directly in memory via `pushChirp(...)`; it does not read exported files.
 
 ---
 
@@ -26,7 +26,18 @@ The Python tracker reads only exported files, not C++ internals.
 
 - Car state is stored as `(x, y, z)` in meters.
 - Probe center is at origin by default.
-- In the probe geometry, array elements are spread in local **y** and **z** (with `x=0` for each element in `tools/fmcw_car_tracker.py::element_positions`).
+- In the tracker array geometry, receive elements are spread in local **x** and **y** with `z=0` for each element.
+- Element positions are centered on the array midpoint:
+
+\[
+\mathbf{r}_{i_x,i_y} =
+\begin{bmatrix}
+\left(i_x - \frac{N_x-1}{2}\right)d_x \\
+\left(i_y - \frac{N_y-1}{2}\right)d_y \\
+0
+\end{bmatrix}
+\]
+
 - The LOS (line-of-sight) direction from radar to target is:
 
 \[
@@ -200,119 +211,193 @@ This is added to each active element when enabled.
 
 ---
 
-## 4) Exported Data Interface (Contract)
+## 4) Tracker Interface (`src/fmcw_tracker.h`)
 
-### 4.1 `output/tx_chirp.bin`
+### 4.1 Construction inputs
 
-- Type: contiguous `complex64`
-- Shape: `[block_size]`
+`StreamingTracker` is constructed from:
 
-### 4.2 `output/rx_burst.bin`
+- `problem::ProblemDescription`
+- `DetectionConfig`
 
-- Type: contiguous `complex64`
-- Logical shape in tracker:
-
-\[
-[\text{chirp\_count},\;\text{block\_size},\;\text{num\_rx}]
-\]
-
-- Layout string exported in metadata:
-
-`chirp_major_sample_major_element_major_complex64`
-
-### 4.3 `output/truth.csv`
-
-Columns from `src/main.cpp`:
-
-- `chirp_index`
-- `time_s`
-- `x_m`, `y_m`, `z_m`
-- `range_m`
-- `radial_velocity_mps`
-- `doppler_hz`
-
-### 4.4 `output/metadata.csv`
-
-Contains waveform, array, and file-path fields used by Python.
-Important keys consumed by tracker:
+`RadarConfig` is derived from the scenario and contains:
 
 - `sample_rate_hz`
 - `carrier_hz`
 - `bandwidth_hz`
+- `chirp_duration_s`
 - `speed_of_light_mps`
 - `block_size`
 - `chirp_count`
-- `chirp_duration_s`
 - `probe_num_x`, `probe_num_y`
 - `probe_dx_m`, `probe_dy_m`
-- `tx_chirp_path`, `rx_burst_path`, `truth_path`
+
+### 4.2 Runtime input contract
+
+Each chirp is streamed into:
+
+\[
+\texttt{pushChirp(chirp\_index, tx\_chirp, rx\_block)}
+\]
+
+with:
+
+- `tx_chirp`: shape `[block_size]`, complex baseband TX reference
+- `rx_block`: shape `[block_size * num_rx]`, flattened sample-major / element-minor burst for one chirp
+
+The tracker caches the conjugated TX chirp on first use:
+
+\[
+s_{tx}^*[n]
+\]
+
+### 4.3 Fixed implementation constraints
+
+The current implementation enforces:
+
+- CPI chirps = `64`
+- Range FFT length = `4096`
+- Doppler FFT length = `128` (2x zero-padded CPI)
+- Azimuth grid count = `181`
+- Elevation grid count = `5001`
+- Single-car support only
+
+### 4.4 DetectionConfig fields that directly change behavior
+
+- `min_range_m`, `max_range_m`
+- `coherent_processing_interval_chirps`
+- `hop_chirps`
+- `zero_doppler_guard_bins`
+- `nfft_range_min`
+- `static_clutter_suppression_enable`
+- `aoa_enable`
+- `azimuth_min_deg`, `azimuth_max_deg`, `azimuth_count`
+- `elevation_min_deg`, `elevation_max_deg`, `elevation_count`
+- `range_gate_bins`, `doppler_gate_bins`
+- `range_association_sigma_m`, `doppler_association_sigma_hz`
+- `range_interp_gate_m`, `doppler_interp_gate_hz`
+- `azimuth_association_sigma_deg`, `elevation_association_sigma_deg`
 
 ---
 
-## 5) Current Tracker Algorithm (`tools/fmcw_car_tracker.py`)
+## 5) Current Streaming Tracker Algorithm (`src/fmcw_tracker.cpp`)
 
-### 5.1 Dechirp
+### 5.1 Sliding window / CPI scheduling
+
+- RX chirps are stored in a ring buffer.
+- Once at least `coherent_processing_interval_chirps` chirps have arrived, a CPI is processed every `hop_chirps` chirps.
+- For a CPI starting at chirp \(k_0\) with length \(K\), the reported batch time is:
+
+\[
+t_{batch} = \left(k_0 + \frac{K}{2}\right)T_c
+\]
+
+### 5.2 Fast-time dechirp and wrap guard
+
+For each chirp, sample, and RX channel:
 
 \[
 s_{beat}[k,n,m] = s_{rx}[k,n,m] \cdot s_{tx}^*[n]
 \]
 
-Indices:
-- \(k\): chirp index
-- \(n\): fast-time sample index
-- \(m\): receive channel index
+Before the range FFT, the tracker blanks an initial fast-time prefix to reduce delayed energy leaking in from the previous chirp. The guard is:
 
-### 5.2 Range FFT + positive/negative folding
+\[
+N_{guard} = \min\left(\frac{N_s}{8}, \left\lceil \frac{2R_{max}}{c}f_s \right\rceil + 2\right)
+\]
+
+where \(R_{max} = \min(\texttt{description.radar.max\_range\_m}, \texttt{DetectionConfig.max\_range\_m})\).
+
+### 5.3 Range FFT and range-axis construction
 
 For each chirp and RX channel:
 
 1. Apply Hann window in fast-time.
-2. Compute FFT with `nfft = max(nfft_range_min, next_pow2(num_samples))`.
-3. FFT-shift.
-4. Fold positive/negative beat-frequency bins by selecting stronger side per chirp.
+2. Zero-pad / FFT to `nfft_range_min`.
+3. Keep only **negative-frequency** bins.
+4. Convert those bins to range and keep only bins inside the configured range gate.
 
-Range mapping:
+The implementation assumes the down-chirp convention produces target beat energy on negative FFT frequencies, so range is mapped as:
 
 \[
-R = \frac{c\,f_b}{2\mu}
+R = -\frac{c f_b}{2\mu}
 \]
 
-### 5.3 Optional static clutter suppression
+No positive/negative folding is done in the C++ tracker.
 
-If enabled, remove slow-time mean per range/RX bin:
+### 5.4 Optional static clutter suppression
+
+If enabled, remove the slow-time mean per retained range/RX bin:
 
 \[
 X_{dyn}[k,r,m] = X[k,r,m] - \frac{1}{K}\sum_{k'}X[k',r,m]
 \]
 
-### 5.4 Range-Doppler processing
+### 5.5 Doppler FFT
 
-For each CPI:
+For each retained range bin and RX channel:
 
 1. Apply Hann window in slow-time.
-2. FFT along chirp axis.
-3. FFT-shift to centered Doppler axis.
-4. Noncoherent combine across RX:
+2. Zero-pad to `2 * CPI` chirps.
+3. FFT along the chirp axis.
+4. FFT-shift to centered Doppler order.
+5. Form noncoherent power across RX:
 
 \[
 P[d,r] = \frac{1}{M}\sum_m |X[d,r,m]|^2
 \]
 
-5. Apply masks:
-   - Range gate: `min_range_m <= R <= max_range_m`
-   - Doppler zero guard (`zero_doppler_guard_bins`)
-6. Detect max-power bin.
-7. Refine with 1D parabolic interpolation in both dimensions.
+The Doppler axis is built from FFT frequency bins, shifted, then negated to match the simulator sign convention:
 
-Velocity and Doppler:
+\[
+f_D = -f_{FFT,shifted}
+\]
+
+Velocity mapping is:
 
 \[
 v_r = \frac{\lambda}{2}f_D
 \]
 
-### 5.5 Angle-of-arrival (AoA)
+### 5.6 Prediction-centered candidate search
 
-Steering directions are built over azimuth/elevation grids:
+Instead of taking the global RD maximum, the tracker scores candidates in a gated neighborhood.
+
+If tracking is initialized, the predicted state is propagated with constant velocity:
+
+\[
+\mathbf{p}_{pred}(t) = \mathbf{p}_{k-1} + \mathbf{v}_{k-1}\Delta t
+\]
+
+and converted to predicted range, Doppler, and direction.
+
+Candidate scoring uses log-power plus Gaussian-style association penalties:
+
+\[
+\text{score}_{RD} = \log(P[d,r] + \epsilon)
+- \frac{1}{2}\left(\frac{R_{cand}-R_{pred}}{\sigma_R}\right)^2
+- \frac{1}{2}\left(\frac{f_{D,cand}-f_{D,pred}}{\sigma_D}\right)^2
+\]
+
+where the penalty terms are applied only after initialization.
+
+The tracker also compensates range-Doppler coupling when evaluating a candidate:
+
+\[
+R_{cand} = R_{raw}(r) - \frac{c}{2\mu}f_{D,cand}
+\]
+
+Only the best few RD candidates (currently 6) are kept for AoA evaluation.
+
+### 5.7 Zero-Doppler guard and search gates
+
+- Bins near zero Doppler are excluded using `zero_doppler_guard_bins`.
+- Search is limited to a rectangular gate centered at the predicted range/Doppler bins when tracking is initialized.
+- Without an initialized track, the search center defaults to the middle of the current retained range and Doppler axes.
+
+### 5.8 Angle-of-arrival (AoA)
+
+The direction grid is built over azimuth/elevation samples:
 
 \[
 \hat{u}(\text{az},\text{el})=
@@ -323,55 +408,202 @@ Steering directions are built over azimuth/elevation grids:
 \end{bmatrix}
 \]
 
-Monostatic steering phase per array element position \(\mathbf{r}_m\):
+The steering phase used by the implementation for element position \(\mathbf{r}_m\) is:
 
 \[
-a_m = e^{j\frac{4\pi}{\lambda}\hat{u}^T\mathbf{r}_m}
+a_m(\hat{u}) = e^{-j\frac{2\pi}{\lambda}\hat{u}^T\mathbf{r}_m}
 \]
 
-Beam score:
+Beam score for an RD-cell snapshot \(x\) is:
 
 \[
-S(\hat{u}) = |a(\hat{u})^H x|^2
+S(\hat{u}) = \log\left(|a(\hat{u})^H x|^2 + \epsilon\right)
 \]
 
-Direction estimate is argmax over grid.
-
-### 5.6 Position and y-velocity derivation
-
-- Estimated 3D point from range and direction:
+If tracking is initialized, angular association penalties are added:
 
 \[
-\hat{\mathbf{p}} = \hat{R}\,\hat{u}
+\text{score}_{AoA} = S(\hat{u})
+- \frac{1}{2}\left(\frac{\Delta az}{\sigma_{az}}\right)^2
+- \frac{1}{2}\left(\frac{\Delta el}{\sigma_{el}}\right)^2
 \]
 
-- Estimated y-velocity (LOS decomposition):
+Implementation detail: elevation search is accelerated by coarse sampling first, then refining around the best coarse elevation for each azimuth.
+
+### 5.9 Joint RD + AoA selection
+
+For each top RD candidate, AoA is evaluated on the selected snapshot. The total candidate score is:
 
 \[
-\hat{v}_y = \hat{v}_r\,\hat{u}_y
+\text{score}_{total} = \text{score}_{RD} + \text{score}_{AoA}
 \]
 
-This is not a full Cartesian velocity solve; it is radial velocity projected onto estimated direction.
+The tracker keeps the candidate with maximum total score.
+
+### 5.10 Sub-bin interpolation
+
+After joint selection, 1D quadratic interpolation is applied in log-power on both axes.
+
+For neighboring powers \(p_{-1}, p_0, p_{+1}\):
+
+\[
+y_i = \log(p_i + \epsilon)
+\]
+
+\[
+\delta = \frac{1}{2}\frac{y_{-1}-y_{+1}}{y_{-1}-2y_0+y_{+1}}
+\]
+
+Interpolation is accepted only if:
+
+- the parabola is concave (`denom < 0`)
+- `|delta| < 0.45`
+- the refined value does not jump too far from the predicted state
+
+The final refined range again includes range-Doppler coupling correction:
+
+\[
+\hat{R} = R_{interp} - \frac{c}{2\mu}\hat{f}_D
+\]
+
+### 5.11 Measurement gating and invalid updates
+
+The final measurement is rejected if range or Doppler is non-finite or deviates too far from prediction.
+
+If a batch is invalid but the tracker has prior state, it still propagates the previous state forward and stores predicted range, Doppler, and direction in the `BatchResult`.
+
+### 5.12 State fusion update
+
+When a valid measurement arrives, the tracker does not run a Kalman filter. Instead, it performs a fixed-weight blend between previous tracked state and the new measurement.
+
+With measurement weight \(w=0.75\):
+
+\[
+\hat{u}_k = \text{normalize}\left((1-w)\hat{u}_{k-1} + w\hat{u}_{meas}\right)
+\]
+
+\[
+\hat{R}_k = (1-w)\hat{R}_{k-1} + w\hat{R}_{meas}
+\]
+
+\[
+\hat{v}_{r,k} = (1-w)\hat{v}_{r,k-1} + w\hat{v}_{r,meas}
+\]
+
+The stored Cartesian state is then formed as radial-only motion along the fused direction:
+
+\[
+\hat{\mathbf{p}}_k = \hat{R}_k \hat{u}_k
+\]
+
+\[
+\hat{\mathbf{v}}_k = \hat{v}_{r,k} \hat{u}_k
+\]
+
+This is still not a full Cartesian velocity solve.
+
+### 5.13 Per-batch outputs
+
+Each `BatchResult` stores:
+
+- `time_s`
+- `range_m`, `doppler_hz`, `phase_rad`
+- `predicted_range_m`, `predicted_doppler_hz`, `predicted_direction`
+- `direction`
+- `range_bin`, `doppler_bin`, `azimuth_bin`, `elevation_bin`
+- `range_bin_offset`, `doppler_bin_offset`
+- `doppler_slice_power` for the selected range bin
+- `slow_time_phase_rad` for the selected beam / range bin
+- `valid`
 
 ---
 
-## 6) Resolution and Ambiguity Equations
+## 6) Summary and Micro-Doppler Estimation
 
-Used in tracker diagnostics:
+`StreamingTracker::buildSummary()` produces a `TrackSummary` with:
 
-- Unambiguous radial velocity span:
+- all batch results
+- raw and smoothed Cartesian positions
+- range and radial-velocity traces
+- estimated Cartesian velocity from finite-difference gradients
+- truth metrics from `truthAtTime(...)`
+- micro-Doppler estimates and diagnostics
+
+### 6.1 Position smoothing and velocity derivation
+
+- Raw positions are formed as:
+
+\[
+\mathbf{p}_{raw}[k] = R[k]\,\hat{u}[k]
+\]
+
+- A boxcar smoother of length `min(5, num_batches)` is applied independently to `x`, `y`, and `z`.
+- Cartesian velocity is then estimated by numerical gradient of the smoothed coordinates.
+
+### 6.2 Micro-Doppler from batch-to-batch Doppler trace
+
+One micro-Doppler estimate is obtained by:
+
+1. taking valid `doppler_hz` values across batches
+2. splitting them into contiguous valid segments
+3. high-pass filtering each segment with a moving-average subtraction
+4. windowing and FFTing each segment
+5. accumulating power in the search band 10-100 Hz
+
+The dominant frequency is refined with the same quadratic peak interpolation used elsewhere.
+
+### 6.3 Micro-Doppler from CPI residual phase
+
+Another estimate is obtained from CPI slow-time phase:
+
+1. beamform the selected range bin per chirp
+2. remove coarse Doppler phase within each CPI
+3. unwrap phase over continuous chirp segments
+4. align phase between overlapping CPI batches
+5. high-pass filter the unwrapped phase residual
+6. FFT and accumulate power in 10-100 Hz
+
+If the batch-Doppler estimate is unavailable, the tracker falls back to this residual-phase estimate.
+
+### 6.4 Reported micro-Doppler metrics
+
+`TrackSummary` reports:
+
+- `microdoppler_phase_frequency_hz`
+- `microdoppler_truth_frequency_hz`
+- `microdoppler_frequency_rmse_hz`
+- `microdoppler_residual_phase_mean_rad`
+- `microdoppler_residual_phase_rms_rad`
+- `microdoppler_residual_phase_stddev_rad`
+- `microdoppler_peak_power`
+- `microdoppler_valid_cpi_count`
+- top micro-Doppler candidate frequencies and powers
+
+---
+
+## 7) Resolution and Ambiguity Equations
+
+Used by the current tracker design:
+
+- Unambiguous radial velocity span for chirp spacing \(T_c\):
 
 \[
 v_{max} = \frac{\lambda}{4T_c}, \quad v \in [-v_{max}, v_{max}]
 \]
 
-- Velocity resolution for CPI length \(M\):
+- Doppler-bin spacing after 2x zero-padding of a CPI with \(K\) chirps:
 
 \[
-\Delta v = \frac{\lambda}{2MT_c}
+\Delta f_D = \frac{1}{2KT_c}
 \]
 
-- Range resolution (ideal FMCW):
+- Velocity-bin spacing:
+
+\[
+\Delta v = \frac{\lambda}{2}\Delta f_D = \frac{\lambda}{4KT_c}
+\]
+
+- Ideal FMCW range resolution:
 
 \[
 \Delta R \approx \frac{c}{2B}
@@ -379,91 +611,101 @@ v_{max} = \frac{\lambda}{4T_c}, \quad v \in [-v_{max}, v_{max}]
 
 ---
 
-## 7) Parameters That Most Affect Tracking Quality
+## 8) Parameters That Most Affect Tracking Quality
 
-### 7.1 Simulator-side (`lib/problem_description.h`)
+### 8.1 Simulator-side (`lib/problem_description.h`)
 
-- `simulation.bandwidth_hz`
+- `radar.bandwidth_hz`
   - Higher improves range resolution.
-- `simulation.sample_rate_hz`
-  - With fixed block size, lower sample rate increases chirp duration (`T_c`) and improves Doppler resolution.
+- `radar.sample_rate_hz`
+  - With fixed block size, lower sample rate increases chirp duration and improves Doppler resolution.
   - But lower sample rate reduces beat-frequency Nyquist headroom.
-- `simulation.carrier_hz`
-  - Higher carrier reduces wavelength and improves Doppler sensitivity for fixed CPI.
-- `simulation.noise_stddev`
-  - Raises/lower SNR.
+- `radar.carrier_hz`
+  - Higher carrier reduces wavelength and increases Doppler sensitivity.
+- `simulator.burst_duration_s`
+  - Sets how many chirps are available in total.
+- `simulator.noise_stddev`
+  - Raises or lowers SNR.
 - `floorplane.enable_static_floorplane`
-  - Strong static clutter can dominate detection if not handled.
+  - Strong static clutter can dominate detection if not suppressed.
 
-### 7.2 Tracker-side (`DetectionConfig`)
+### 8.2 Tracker-side (`DetectionConfig`)
 
 - `coherent_processing_interval_chirps`
-  - Larger CPI improves Doppler resolution and SNR (coherent gain), but reduces temporal update rate.
+  - Larger CPI improves Doppler resolution and coherent gain.
+- `hop_chirps`
+  - Smaller hop increases update rate and overlap between CPIs.
 - `zero_doppler_guard_bins`
-  - Helps avoid static leakage; too large can remove slow-moving target content.
+  - Helps reject static leakage; too large can suppress slow targets.
 - `min_range_m` / `max_range_m`
-  - Strongly constrains search and can avoid wrong peaks.
+  - Define which negative-frequency range bins are even retained.
 - `static_clutter_suppression_enable`
-  - Useful in static-heavy scenes; harmful if target Doppler is near zero and scene is already clean.
-- AoA grid spans and counts
-  - Finer grids improve angular granularity at higher compute cost.
+  - Helps in static-heavy scenes; hurts if the target is near-zero Doppler and the scene is clean.
+- `range_gate_bins` / `doppler_gate_bins`
+  - Determine how tightly the tracker searches around its prediction.
+- Association sigmas and interpolation gates
+  - Control how strongly prediction biases selection and whether sub-bin refinement is trusted.
+- AoA grid span and density
+  - Directly trade angular granularity against compute cost.
 
 ---
 
-## 8) Implementation Notes and Caveats
+## 9) Implementation Notes and Caveats
 
-1. **Single-target detector by global max**
-   - Current `detect_moving_car_in_cpi` chooses one strongest `(doppler, range)` cell after masking.
-   - Multi-target scenes need CFAR / peak clustering / track association.
+1. **Single-target / single-car only**
+   - The tracker throws unless the scenario contains exactly one car.
 
-2. **Range folding logic**
-   - Range FFT folds +/- beat bins by power; this is robust to sign conventions but can hide sign-related structure.
+2. **Hard-coded operating point**
+   - CPI, range FFT, and AoA grid sizes are fixed by compile-time assumptions.
 
-3. **AoA from one snapshot per CPI**
-   - AoA uses the selected RD cell snapshot; outlier cell selection directly causes angular outliers.
+3. **Negative-frequency-only range processing**
+   - Unlike the older Python tracker, there is no positive/negative folding.
 
-4. **y-velocity interpretation**
-   - `est_y_velocity_mps` is projection from radial velocity, not independent Cartesian estimation.
+4. **Prediction-biased detection**
+   - Once initialized, detection is no longer a pure global-max search; gating and association penalties strongly influence selection.
 
-5. **Truth sampling for plots**
-   - Truth is interpolated to estimate times using linear interpolation.
+5. **Range-Doppler coupling correction is explicit**
+   - Range estimates are corrected by a term proportional to Doppler frequency.
 
-6. **Printed simulator message**
-   - `main.cpp` prints a floorplane message string regardless of enabled flag; rely on metadata key `static_floorplane_enabled` for actual status.
+6. **Velocity state remains radial-only**
+   - Cartesian velocity is modeled as radial speed along the estimated direction, not independently solved from measurements.
 
----
+7. **Invalid measurements do not fully break the track**
+   - The tracker propagates prior state through missed detections.
 
-## 9) Minimal Steps to Build a Better Tracker
-
-If building a new algorithm for this simulator, a practical roadmap is:
-
-1. Parse `metadata.csv` and load binaries exactly as defined above.
-2. Perform dechirp, range FFT, and Doppler FFT with consistent windowing and axis definitions.
-3. Add a robust detector (CFAR in RD map) instead of single global max.
-4. Estimate AoA per detection (or with covariance-based methods like MUSIC/Capon).
-5. Convert detections to measurement vector \([R, v_r, az, el]\).
-6. Track in time with a dynamic model (e.g., EKF/UKF in Cartesian state), fusing measurement uncertainty.
-7. Validate against `truth.csv` metrics:
-   - RMSE(range)
-   - RMSE(radial velocity)
-   - angular error
-   - Cartesian position/velocity error
+8. **Micro-Doppler search band is narrow**
+   - The current implementation only searches roughly 10-100 Hz residual content.
 
 ---
 
-## 10) File Map (Primary References)
+## 10) Practical Roadmap for a Better Tracker
+
+If building a new algorithm on top of this simulator/tracker stack, a practical roadmap is:
+
+1. Keep the same dechirp, chirp timing, and sign conventions as `src/fmcw_tracker.cpp`.
+2. Replace heuristic RD candidate selection with a detector such as CFAR + clustering.
+3. Replace fixed-weight fusion with an EKF/UKF or particle filter over Cartesian state.
+4. Estimate full velocity instead of projecting radial speed onto direction.
+5. Replace grid AoA with covariance-based methods if multiple snapshots or richer apertures are available.
+6. Generalize the implementation beyond one target and fixed compile-time dimensions.
+7. Validate against `truthAtTime(...)` / `truth_metrics` using range, Doppler, angle, and Cartesian error.
+
+---
+
+## 11) File Map (Primary References)
 
 - Scenario/config: `lib/problem_description.h`
 - Noise constants: `lib/problem_config.h`
 - Dynamics: `lib/dynamics.cpp`
 - Environment/clutter: `lib/environment.cpp`
 - Simulator core: `lib/simulation.h`, `lib/simulation.cpp`
+- Streaming tracker API: `src/fmcw_tracker.h`
+- Streaming tracker implementation: `src/fmcw_tracker.cpp`
 - Data generation executable: `src/main.cpp`
-- Tracking algorithm: `tools/fmcw_car_tracker.py`
 
 ---
 
-## 11) Quick Formula Sheet
+## 12) Quick Formula Sheet
 
 \[
 \lambda = \frac{c}{f_c}
@@ -474,7 +716,7 @@ T_c = \frac{N_s}{f_s},\quad \mu = \frac{B}{T_c}
 \]
 
 \[
-R = \frac{c f_b}{2\mu}
+R = -\frac{c f_b}{2\mu}
 \]
 
 \[
@@ -482,9 +724,13 @@ f_D = \frac{2v_r}{\lambda},\quad v_r = \frac{\lambda f_D}{2}
 \]
 
 \[
-v_{max} = \frac{\lambda}{4T_c},\quad \Delta v = \frac{\lambda}{2MT_c}
+R_{corr} = R_{raw} - \frac{c}{2\mu}f_D
 \]
 
 \[
-\hat{\mathbf{p}} = \hat{R}\hat{u},\quad \hat{v}_y = \hat{v}_r\hat{u}_y
+\hat{\mathbf{p}} = \hat{R}\hat{u},\quad \hat{\mathbf{v}} = \hat{v}_r\hat{u}
+\]
+
+\[
+a_m(\hat{u}) = e^{-j\frac{2\pi}{\lambda}\hat{u}^T\mathbf{r}_m}
 \]
