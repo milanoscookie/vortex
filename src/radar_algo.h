@@ -9,10 +9,9 @@
 
 namespace radar_algo {
 
-using Complex = std::complex<double>;
-using ChirpCallback = std::function<void(std::size_t chirp_index,
-                                         std::span<const Complex> tx_chirp,
-                                         std::span<const Complex> rx_block)>;
+using Complex = problem::SignalComplex;
+using ChirpCallback = std::function<void(
+    std::size_t chirp_index, std::span<const Complex> tx_chirp, std::span<const Complex> rx_block)>;
 
 std::size_t computeChirpCount(const problem::ProblemDescription &description);
 problem::ProblemDescription

@@ -53,7 +53,7 @@ problem::Vec3 meanVec3(const std::vector<problem::Vec3> &values) {
     for (const problem::Vec3 &value : values) {
         mean += value;
     }
-    return mean / static_cast<double>(values.size());
+    return mean / static_cast<problem::Real>(values.size());
 }
 
 double meanScalar(const std::vector<double> &values) {
@@ -101,7 +101,7 @@ truthLineOfSightVelocityVectors(const std::vector<problem::SimulationMetrics> &t
 }
 
 double rmseVec3(const std::vector<problem::Vec3> &estimates,
-               const std::vector<problem::SimulationMetrics> &truth) {
+                const std::vector<problem::SimulationMetrics> &truth) {
     if (estimates.empty() || estimates.size() != truth.size()) {
         return 0.0f;
     }
@@ -114,7 +114,7 @@ double rmseVec3(const std::vector<problem::Vec3> &estimates,
 }
 
 double rmseRange(const std::vector<double> &ranges_m,
-                const std::vector<problem::SimulationMetrics> &truth) {
+                 const std::vector<problem::SimulationMetrics> &truth) {
     if (ranges_m.empty() || ranges_m.size() != truth.size()) {
         return 0.0f;
     }
@@ -150,7 +150,7 @@ double wrapAngleDeg(double angle_deg) {
 }
 
 double rmseAzimuthDeg(const std::vector<fmcw_tracker::BatchResult> &batches,
-                     const std::vector<problem::SimulationMetrics> &truth) {
+                      const std::vector<problem::SimulationMetrics> &truth) {
     if (batches.empty() || batches.size() != truth.size()) {
         return 0.0f;
     }
@@ -165,7 +165,7 @@ double rmseAzimuthDeg(const std::vector<fmcw_tracker::BatchResult> &batches,
 }
 
 double rmseElevationDeg(const std::vector<fmcw_tracker::BatchResult> &batches,
-                       const std::vector<problem::SimulationMetrics> &truth) {
+                        const std::vector<problem::SimulationMetrics> &truth) {
     if (batches.empty() || batches.size() != truth.size()) {
         return 0.0f;
     }

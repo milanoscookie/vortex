@@ -14,18 +14,19 @@ namespace radar {
 
 class ReceiverNoiseModel {
   public:
-    using Complex = std::complex<double>;
+    using Complex = problem::SignalComplex;
+    using Real = problem::Real;
+    using AmpReal = problem::AmpReal;
 
-    ReceiverNoiseModel(double receiver_noiselevel_stddev,
-                       double receiver_noiselevel_mean,
-                       double receiver_noise_distribution_stddev,
+    ReceiverNoiseModel(AmpReal receiver_noiselevel_stddev,
+                       AmpReal receiver_noiselevel_mean,
+                       AmpReal receiver_noise_distribution_stddev,
                        bool use_std_normal_distribution,
                        std::uint32_t random_seed)
         : receiver_noiselevel_stddev_(receiver_noiselevel_stddev),
           receiver_noise_distribution_mean_(receiver_noiselevel_mean),
           receiver_noise_distribution_stddev_(receiver_noise_distribution_stddev),
-          use_std_normal_distribution_(use_std_normal_distribution),
-          std_rng_(random_seed),
+          use_std_normal_distribution_(use_std_normal_distribution), std_rng_(random_seed),
           std_normal_(0.0f, 1.0f) {
         updateDerivedConstants();
         seedRng(random_seed);
@@ -105,24 +106,24 @@ class ReceiverNoiseModel {
         return result;
     }
 
-    double sampleStandardNormal() noexcept {
+    Real sampleStandardNormal() noexcept {
         if (use_std_normal_distribution_) {
-            return std_normal_(std_rng_);
+            return static_cast<Real>(std_normal_(std_rng_));
         }
         const unsigned bit_count = std::popcount(sampleUint32()) + std::popcount(sampleUint32()) +
                                    std::popcount(sampleUint32());
-        return (static_cast<double>(bit_count) - kPopcountNormalMean) * kPopcountNormalScale;
+        return (static_cast<Real>(bit_count) - kPopcountNormalMean) * kPopcountNormalScale;
     }
 
-    double receiver_noiselevel_stddev_ = 0.0f;
-    double receiver_noise_distribution_mean_ = 0.0f;
-    double receiver_noise_distribution_stddev_ = 1.0f;
-    double effective_sigma_ = 0.0f;
+    AmpReal receiver_noiselevel_stddev_ = 0.0;
+    AmpReal receiver_noise_distribution_mean_ = 0.0;
+    AmpReal receiver_noise_distribution_stddev_ = 1.0;
+    Real effective_sigma_ = 0.0f;
     bool noise_enabled_ = false;
     bool use_std_normal_distribution_ = false;
     std::array<std::uint32_t, 4> rng_state_{};
     std::mt19937 std_rng_;
-    std::normal_distribution<double> std_normal_;
+    std::normal_distribution<AmpReal> std_normal_;
 };
 
 } // namespace radar

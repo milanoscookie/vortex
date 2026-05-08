@@ -9,13 +9,17 @@
 
 namespace problem {
 
-using Vec3 = Eigen::Vector3d;
+using Real = float;
+using AmpReal = double;
+using Vec3 = Eigen::Vector3f;
+using SignalComplex = std::complex<Real>;
+using AmplitudeComplex = std::complex<AmpReal>;
 using size_t = std::size_t;
 
 struct Constants {
-    static inline constexpr double kPi = 3.14159265358979323846f;
-    static inline constexpr double kSpeedOfLightMps = 299'792'458.0f;
-    static inline constexpr double kInvSqrt2 = 0.70710678f;
+    static inline constexpr Real kPi = 3.14159265358979323846f;
+    static inline constexpr Real kSpeedOfLightMps = 299'792'458.0f;
+    static inline constexpr Real kInvSqrt2 = 0.70710678f;
 };
 
 struct RadarSettings {
@@ -44,53 +48,53 @@ struct RadarSettings {
     // static inline constexpr double kDefaultReceiverNoiseDistributionStddev = 1.0f;
     // static inline constexpr bool kDefaultUseStdNormalDistribution = true;
 
-    static inline constexpr double kDefaultBandwidthHz = 10.0e6f;
-    static inline constexpr double kDefaultSampleRateHz = 2.0f * kDefaultBandwidthHz;
-    static inline constexpr double kDefaultChirpDurationS = 12.8e-6f;
+    static inline constexpr Real kDefaultBandwidthHz = 10.0e6f;
+    static inline constexpr Real kDefaultSampleRateHz = 2.0f * kDefaultBandwidthHz;
+    static inline constexpr Real kDefaultChirpDurationS = 12.8e-6f;
     static inline constexpr size_t kRadarBlockSize =
         static_cast<size_t>(kDefaultSampleRateHz * kDefaultChirpDurationS + 0.5f);
-    static inline constexpr double kDefaultCarrierHz = 77.0e9f;
-    static inline constexpr double kDefaultMinRangeM = 1.0f;
-    static inline constexpr double kDefaultMaxRangeM = 500.0f;
-    static inline constexpr double kDefaultFieldGain = 1.0f;
-    static inline constexpr double kDefaultReceiverNoiseStddev = 0.0f;
-    static inline constexpr double kDefaultReceiverNoiseMean = 0.0f;
-    static inline constexpr double kDefaultReceiverNoiseDistributionStddev = 1.0f;
+    static inline constexpr Real kDefaultCarrierHz = 77.0e9f;
+    static inline constexpr Real kDefaultMinRangeM = 1.0f;
+    static inline constexpr Real kDefaultMaxRangeM = 500.0f;
+    static inline constexpr Real kDefaultFieldGain = 1.0f;
+    static inline constexpr AmpReal kDefaultReceiverNoiseStddev = 0.0;
+    static inline constexpr AmpReal kDefaultReceiverNoiseMean = 0.0;
+    static inline constexpr AmpReal kDefaultReceiverNoiseDistributionStddev = 1.0;
     static inline constexpr bool kDefaultUseStdNormalDistribution = true;
 
-    double bandwidth_hz = kDefaultBandwidthHz;
-    double sample_rate_hz = kDefaultSampleRateHz;
-    double carrier_hz = kDefaultCarrierHz;
-    double min_range_m = kDefaultMinRangeM;
-    double max_range_m = kDefaultMaxRangeM;
+    Real bandwidth_hz = kDefaultBandwidthHz;
+    Real sample_rate_hz = kDefaultSampleRateHz;
+    Real carrier_hz = kDefaultCarrierHz;
+    Real min_range_m = kDefaultMinRangeM;
+    Real max_range_m = kDefaultMaxRangeM;
 
-    double field_gain = kDefaultFieldGain;
-    double receiver_noiselevel_stddev = kDefaultReceiverNoiseStddev;
-    double receiver_noiselevel_mean = kDefaultReceiverNoiseMean;
-    double receiver_noise_distribution_stddev = kDefaultReceiverNoiseDistributionStddev;
+    Real field_gain = kDefaultFieldGain;
+    AmpReal receiver_noiselevel_stddev = kDefaultReceiverNoiseStddev;
+    AmpReal receiver_noiselevel_mean = kDefaultReceiverNoiseMean;
+    AmpReal receiver_noise_distribution_stddev = kDefaultReceiverNoiseDistributionStddev;
     bool receiver_noise_use_std_normal_distribution = kDefaultUseStdNormalDistribution;
 };
 
 struct ProbeSettings {
     Vec3 center_m = Vec3::Zero();
-    double spacing_x_wavelengths = 0.5f;
-    double spacing_y_wavelengths = 0.5f;
+    Real spacing_x_wavelengths = 0.5f;
+    Real spacing_y_wavelengths = 0.5f;
 };
 
 struct FloorplaneClutterSettings {
     bool enable_static_floorplane = false;
-    double range_m = 101.5f;
-    double amplitude_ref = 0.001f;
-    double reference_range_m = 100.0f;
-    double range_exponent = 1.0f;
-    double phase_rad = 0.7f;
+    Real range_m = 101.5f;
+    AmpReal amplitude_ref = 0.001;
+    Real reference_range_m = 100.0f;
+    Real range_exponent = 1.0f;
+    Real phase_rad = 0.7f;
 };
 
 struct SimulatorSettings {
-    double burst_duration_s = 1.00f;
-    double tracking_duration_s = 1.00f;
-    double split_duration_s = 15.0f;
-    double prediction_duration_s = 15.0f;
+    Real burst_duration_s = 1.00f;
+    Real tracking_duration_s = 1.00f;
+    Real split_duration_s = 15.0f;
+    Real prediction_duration_s = 15.0f;
     std::uint32_t random_seed = 1U;
     size_t vehicle_count = 1;
 };
@@ -98,29 +102,29 @@ struct SimulatorSettings {
 struct CarSettings {
     Vec3 initial_position_m = Vec3(50.0f, 50.0f, 100.0f);
     Vec3 base_velocity_mps = Vec3(20.0f, 20.0f, 0.0f);
-    double yaw_rad = 0.0f;
-    double length_m = 4.5f;
-    double width_m = 1.8f;
-    double height_m = 1.5f;
-    double bounce_amplitude_m = 0.01f;  // heavy: 0.002
-    double bounce_frequency_hz = 30.0f; // heavy: 4
-    double bounce_phase_rad = 0.0f;     // each car should be different
-    std::complex<double> reflectivity = std::polar(1.0f, 0.0f);
+    Real yaw_rad = 0.0f;
+    Real length_m = 4.5f;
+    Real width_m = 1.8f;
+    Real height_m = 1.5f;
+    Real bounce_amplitude_m = 0.01f;  // heavy: 0.002
+    Real bounce_frequency_hz = 30.0f; // heavy: 4
+    Real bounce_phase_rad = 0.0f;     // each car should be different
+    SignalComplex reflectivity = std::polar(1.0f, 0.0f);
 };
 
 struct VehicleState {
     Vec3 center_m = Vec3::Zero();
     Vec3 velocity_mps = Vec3::Zero();
-    double yaw_rad = 0.0f;
-    std::complex<double> reflectivity = {1.0f, 0.0f};
+    Real yaw_rad = 0.0f;
+    SignalComplex reflectivity = {1.0f, 0.0f};
 };
 
 struct SimulationMetrics {
-    double time_s = 0.0f;
-    double range_m = 0.0f;
-    double delay_s = 0.0f;
-    double radial_velocity_mps = 0.0f;
-    double doppler_hz = 0.0f;
+    Real time_s = 0.0f;
+    Real range_m = 0.0f;
+    Real delay_s = 0.0f;
+    Real radial_velocity_mps = 0.0f;
+    Real doppler_hz = 0.0f;
     Vec3 position_m = Vec3::Zero();
     Vec3 velocity_mps = Vec3::Zero();
     Vec3 line_of_sight = Vec3::Zero();

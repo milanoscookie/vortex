@@ -10,11 +10,11 @@
 
 namespace radar {
 
-template <typename Complex> inline Complex unitPhasor(double phase) noexcept {
-    double sin_phase = 0.0;
-    double cos_phase = 0.0;
+template <typename Complex> inline Complex unitPhasor(problem::Real phase) noexcept {
+    problem::Real sin_phase = 0.0f;
+    problem::Real cos_phase = 0.0f;
 #if defined(__GNUC__) || defined(__clang__)
-    __builtin_sincos(phase, &sin_phase, &cos_phase);
+    __builtin_sincosf(phase, &sin_phase, &cos_phase);
 #else
     sin_phase = std::sin(phase);
     cos_phase = std::cos(phase);
@@ -28,34 +28,36 @@ inline Complex makeMonostaticBaseReturn(const TargetObservation &observation,
                                         const Complex &reflectivity,
                                         const TxHistoryBuffer<Complex, HistorySize> &tx_history,
                                         std::size_t sample_index) noexcept {
-    const double delay_samples = observation.delay_s * radar_settings.sample_rate_hz;
-    const double path_gain = radar_settings.field_gain /
-                             std::max(observation.safe_range_m * observation.safe_range_m, 1.0e-6);
+    const problem::Real delay_samples = observation.delay_s * radar_settings.sample_rate_hz;
+    const problem::Real path_gain =
+        radar_settings.field_gain /
+        std::max(observation.safe_range_m * observation.safe_range_m, 1.0e-6f);
     return tx_history.delayedSample(sample_index, delay_samples) * reflectivity * path_gain;
 }
 
-inline double makeMonostaticBasePhase(const TargetObservation &observation,
-                                      double wave_number) noexcept {
+inline problem::Real makeMonostaticBasePhase(const TargetObservation &observation,
+                                             problem::Real wave_number) noexcept {
     return -2.0 * wave_number * observation.range_m;
 }
 
 template <typename Complex>
 inline Complex applySpatialPhase(const Complex &base_return,
-                                 double base_phase,
+                                 problem::Real base_phase,
                                  const problem::Vec3 &line_of_sight,
                                  const problem::Vec3 &element_position_m,
-                                 double weight,
-                                 double wave_number) noexcept {
-    const double total_phase = base_phase + wave_number * line_of_sight.dot(element_position_m);
+                                 problem::Real weight,
+                                 problem::Real wave_number) noexcept {
+    const problem::Real total_phase =
+        base_phase + wave_number * line_of_sight.dot(element_position_m);
     return weight * base_return * unitPhasor<Complex>(total_phase);
 }
 
 template <typename Complex, std::size_t HistorySize>
 inline Complex sampleBistaticTargetReturn(const TargetObservation &observation,
                                           const problem::Vec3 &element_position_m,
-                                          double element_delay_samples,
-                                          double weight,
-                                          double wave_number,
+                                          problem::Real element_delay_samples,
+                                          problem::Real weight,
+                                          problem::Real wave_number,
                                           const problem::RadarSettings &radar_settings,
                                           const Complex &reflectivity,
                                           const TxHistoryBuffer<Complex, HistorySize> &tx_history,
@@ -65,21 +67,21 @@ inline Complex sampleBistaticTargetReturn(const TargetObservation &observation,
     }
 
     const problem::Vec3 delta_m = observation.position_m - element_position_m;
-    const double range_rx_sq_m = delta_m.squaredNorm();
-    const double max_range_sq_m = radar_settings.max_range_m * radar_settings.max_range_m;
+    const problem::Real range_rx_sq_m = delta_m.squaredNorm();
+    const problem::Real max_range_sq_m = radar_settings.max_range_m * radar_settings.max_range_m;
     if (range_rx_sq_m > max_range_sq_m) {
         return Complex(0.0, 0.0);
     }
 
-    const double range_rx_m = std::sqrt(range_rx_sq_m);
+    const problem::Real range_rx_m = std::sqrt(range_rx_sq_m);
 
-    const double total_range_m = observation.range_m + range_rx_m;
-    const double safe_range_rx_m = std::max(range_rx_m, radar_settings.min_range_m);
-    const double delay_samples =
+    const problem::Real total_range_m = observation.range_m + range_rx_m;
+    const problem::Real safe_range_rx_m = std::max(range_rx_m, radar_settings.min_range_m);
+    const problem::Real delay_samples =
         total_range_m * (radar_settings.sample_rate_hz / problem::Constants::kSpeedOfLightMps) +
         element_delay_samples;
-    const double path_gain = radar_settings.field_gain / (safe_range_rx_m * safe_range_rx_m);
-    const double phase = -wave_number * total_range_m;
+    const problem::Real path_gain = radar_settings.field_gain / (safe_range_rx_m * safe_range_rx_m);
+    const problem::Real phase = -wave_number * total_range_m;
 
     return (weight * path_gain) * tx_history.delayedSample(sample_index, delay_samples) *
            reflectivity * unitPhasor<Complex>(phase);

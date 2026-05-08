@@ -11,16 +11,16 @@ struct TargetObservation {
     problem::Vec3 position_m = problem::Vec3::Zero();
     problem::Vec3 velocity_mps = problem::Vec3::Zero();
     problem::Vec3 line_of_sight = problem::Vec3::Zero();
-    double range_m = 0.0;
-    double safe_range_m = 0.0;
-    double delay_s = 0.0;
-    double radial_velocity_mps = 0.0;
-    double doppler_hz = 0.0;
+    problem::Real range_m = 0.0f;
+    problem::Real safe_range_m = 0.0f;
+    problem::Real delay_s = 0.0f;
+    problem::Real radial_velocity_mps = 0.0f;
+    problem::Real doppler_hz = 0.0f;
 };
 
 inline TargetObservation observeTarget(const CarDynamics &dynamics,
                                        const problem::RadarSettings &radar_settings,
-                                       double t_s) noexcept {
+                                       problem::Real t_s) noexcept {
     TargetObservation observation;
     observation.position_m = dynamics.positionAt(t_s);
     observation.velocity_mps = dynamics.velocityAt(t_s);
@@ -29,13 +29,13 @@ inline TargetObservation observeTarget(const CarDynamics &dynamics,
     observation.line_of_sight = observation.position_m / observation.safe_range_m;
     observation.delay_s = 2.0 * observation.range_m / problem::Constants::kSpeedOfLightMps;
     observation.radial_velocity_mps = observation.velocity_mps.dot(observation.line_of_sight);
-    const double lambda_m = problem::Constants::kSpeedOfLightMps / radar_settings.carrier_hz;
+    const problem::Real lambda_m = problem::Constants::kSpeedOfLightMps / radar_settings.carrier_hz;
     observation.doppler_hz = 2.0 * observation.radial_velocity_mps / lambda_m;
     return observation;
 }
 
 inline problem::SimulationMetrics
-makeSimulationMetrics(double t_s, const TargetObservation &observation) noexcept {
+makeSimulationMetrics(problem::Real t_s, const TargetObservation &observation) noexcept {
     problem::SimulationMetrics metrics;
     metrics.time_s = t_s;
     metrics.range_m = observation.range_m;

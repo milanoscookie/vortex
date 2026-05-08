@@ -6,9 +6,9 @@ namespace {
 
 RadarSimulator::DefaultProbe makeDefaultProbe(const RadarSimulator::RadarSettings &radar_settings,
                                               const problem::ProbeSettings &probe_settings) {
-    const double lambda_m = problem::Constants::kSpeedOfLightMps / radar_settings.carrier_hz;
-    const double spacing_x_m = probe_settings.spacing_x_wavelengths * lambda_m;
-    const double spacing_y_m = probe_settings.spacing_y_wavelengths * lambda_m;
+    const problem::Real lambda_m = problem::Constants::kSpeedOfLightMps / radar_settings.carrier_hz;
+    const problem::Real spacing_x_m = probe_settings.spacing_x_wavelengths * lambda_m;
+    const problem::Real spacing_y_m = probe_settings.spacing_y_wavelengths * lambda_m;
     return RadarSimulator::DefaultProbe(probe_settings.center_m, spacing_x_m, spacing_y_m);
 }
 
@@ -76,7 +76,7 @@ auto RadarSimulator::prepareDefaultProbeState(const ProbeSettings &probe_setting
     return makeProbeState(makeDefaultProbe(radar_settings_, probe_settings));
 }
 
-double RadarSimulator::sampleIntervalSeconds() const noexcept {
+problem::Real RadarSimulator::sampleIntervalSeconds() const noexcept {
     return 1.0f / radar_settings_.sample_rate_hz;
 }
 
@@ -86,7 +86,7 @@ void RadarSimulator::step(RadarSimulator::ElementVector &output, Complex tx_samp
 }
 
 RadarSimulator::SimulationMetrics
-RadarSimulator::metricsFromObservation(double t_s,
+RadarSimulator::metricsFromObservation(problem::Real t_s,
                                        const radar::TargetObservation &observation) const noexcept {
     return radar::makeSimulationMetrics(t_s, observation);
 }

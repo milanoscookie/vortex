@@ -24,7 +24,7 @@ class RadarSimulator {
     static constexpr size_t kTxHistorySize = 8192U;
     static constexpr size_t kBlockSize = problem::RadarSettings::kRadarBlockSize;
 
-    using Complex = std::complex<double>;
+    using Complex = problem::SignalComplex;
 
     using Vec3 = problem::Vec3;
     using CarSettings = problem::CarSettings;
@@ -81,7 +81,7 @@ class RadarSimulator {
     const std::vector<CarDynamics> &cars() const noexcept {
         return dynamics_;
     }
-    double timeSeconds() const noexcept {
+    problem::Real timeSeconds() const noexcept {
         return time_s_;
     }
     const SimulationMetrics &lastMetrics() const noexcept {
@@ -95,9 +95,10 @@ class RadarSimulator {
     template <size_t NumX, size_t NumY>
     ProbeState<NumX, NumY> makeProbeState(const Probe<NumX, NumY> &probe) const;
     DefaultProbeState prepareDefaultProbeState(const ProbeSettings &probe_settings) const;
-    double sampleIntervalSeconds() const noexcept;
+    problem::Real sampleIntervalSeconds() const noexcept;
     SimulationMetrics
-    metricsFromObservation(double t_s, const radar::TargetObservation &observation) const noexcept;
+    metricsFromObservation(problem::Real t_s,
+                           const radar::TargetObservation &observation) const noexcept;
     static std::vector<CarDynamics> makeDynamics(const CarList &car_settings);
     RadarSettings radar_settings_;
     std::vector<CarDynamics> dynamics_;
@@ -106,7 +107,7 @@ class RadarSimulator {
     radar::ReceiverNoiseModel receiver_noise_model_;
     DefaultProbeState default_probe_state_;
     size_t sample_index_ = 0;
-    double time_s_ = 0.0f;
+    problem::Real time_s_ = 0.0f;
     std::vector<radar::TargetObservation> observation_scratch_;
     std::vector<SimulationMetrics> last_metrics_;
 };
@@ -139,8 +140,8 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
 
     tx_history_.store(sample_index_, tx_sample);
 
-    const double t_s = time_s_;
-    const double wave_number =
+    const problem::Real t_s = time_s_;
+    const problem::Real wave_number =
         2.0f * Constants::kPi * radar_settings_.carrier_hz / Constants::kSpeedOfLightMps;
     const bool has_floor = environment_.hasStaticFloorplane();
     std::array<Complex, element_count> noise_samples{};
@@ -164,7 +165,7 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
     }
 
     for (int element_index = 0; element_index < static_cast<int>(element_count); ++element_index) {
-        const double weight = probe_state.element_weight(element_index);
+        const problem::Real weight = probe_state.element_weight(element_index);
         if (weight == 0.0f) {
             output(element_index) = Complex(0.0f, 0.0f);
             continue;
@@ -172,7 +173,8 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
 
         const auto element_position =
             probe_state.element_positions_m.col(static_cast<Eigen::Index>(element_index));
-        const double element_delay_samples = probe_state.element_delay_samples(element_index);
+        const problem::Real element_delay_samples =
+            probe_state.element_delay_samples(element_index);
 
         for (std::size_t car_index = 0; car_index < dynamics_.size(); ++car_index) {
             output(static_cast<Eigen::Index>(element_index)) +=
