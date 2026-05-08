@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG -flto=auto -fno-fat-lto-objects -Wl,--dependency-file=CMakeFiles/vortex_test_iir_filter.dir/link.d CMakeFiles/vortex_test_iir_filter.dir/vortex_test_iir_filter.cpp.o -o vortex_test_iir_filter  -lfftw3 -lfftw3f

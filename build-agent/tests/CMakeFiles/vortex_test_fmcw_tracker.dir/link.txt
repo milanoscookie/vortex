@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG -flto=auto -fno-fat-lto-objects -Wl,--dependency-file=CMakeFiles/vortex_test_fmcw_tracker.dir/link.d CMakeFiles/vortex_test_fmcw_tracker.dir/vortex_test_fmcw_tracker.cpp.o -o vortex_test_fmcw_tracker  -lfftw3 -lfftw3f ../src/libvortex_core.a -lfftw3 -lfftw3f
