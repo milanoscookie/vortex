@@ -11,12 +11,12 @@ template <size_t NumX, size_t NumY> class Probe {
   public:
     using Coord = coords::Coords;
     using Vec3 = problem::Vec3;
-    using PositionMatrix = Eigen::Matrix<float, 3, NumX * NumY>;
-    using ScalarArray = Eigen::Array<float, NumX * NumY, 1>;
+    using PositionMatrix = Eigen::Matrix<double, 3, NumX * NumY>;
+    using ScalarArray = Eigen::Array<double, NumX * NumY, 1>;
 
     struct ProbeElement {
         bool enabled = true;
-        float weight = 1.0f;
+        double weight = 1.0f;
         std::size_t delay = 0U;
 
         bool isActive() const noexcept {
@@ -30,15 +30,15 @@ template <size_t NumX, size_t NumY> class Probe {
         ScalarArray element_weight = ScalarArray::Zero();
     };
 
-    Probe(const Coord &center, float dx, float dy) : center_(center), dx_(dx), dy_(dy) {}
+    Probe(const Coord &center, double dx, double dy) : center_(center), dx_(dx), dy_(dy) {}
 
     const Coord &center() const noexcept {
         return center_;
     }
-    float dx() const noexcept {
+    double dx() const noexcept {
         return dx_;
     }
-    float dy() const noexcept {
+    double dy() const noexcept {
         return dy_;
     }
 
@@ -71,8 +71,8 @@ template <size_t NumX, size_t NumY> class Probe {
     }
 
     Coord elementPosition(size_t ix, size_t iy) const noexcept {
-        const float x_offset = (static_cast<float>(ix) - 0.5f * static_cast<float>(NumX - 1)) * dx_;
-        const float y_offset = (static_cast<float>(iy) - 0.5f * static_cast<float>(NumY - 1)) * dy_;
+        const double x_offset = (static_cast<double>(ix) - 0.5f * static_cast<double>(NumX - 1)) * dx_;
+        const double y_offset = (static_cast<double>(iy) - 0.5f * static_cast<double>(NumY - 1)) * dy_;
 
         return center_ + Coord(x_offset, y_offset, 0.0f);
     }
@@ -106,7 +106,7 @@ template <size_t NumX, size_t NumY> class Probe {
                 compiled.element_positions_m.col(static_cast<Eigen::Index>(flat_index)) =
                     elementPosition(ix, iy);
                 compiled.element_delay_samples(static_cast<Eigen::Index>(flat_index)) =
-                    static_cast<float>((*this)(ix, iy).delay);
+                    static_cast<double>((*this)(ix, iy).delay);
                 compiled.element_weight(static_cast<Eigen::Index>(flat_index)) =
                     (*this)(ix, iy).isActive() ? (*this)(ix, iy).weight : 0.0f;
             }
@@ -120,7 +120,7 @@ template <size_t NumX, size_t NumY> class Probe {
     }
 
     Coord center_;
-    float dx_;
-    float dy_;
+    double dx_;
+    double dy_;
     std::array<ProbeElement, NumX * NumY> elems_;
 };

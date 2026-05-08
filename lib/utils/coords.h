@@ -4,15 +4,15 @@
 
 namespace coords {
 
-using Coords = Eigen::Vector3f;
+using Coords = Eigen::Vector3d;
 
 // Euclidean distance between two 3D points
-inline float distanceTo(const Coords &a, const Coords &b) {
+inline double distanceTo(const Coords &a, const Coords &b) {
     return (a - b).norm();
 }
 
 // Euclidean norm of a 3D vector
-inline float norm(const Coords &v) {
+inline double norm(const Coords &v) {
     return v.norm();
 }
 

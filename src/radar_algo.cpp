@@ -10,24 +10,24 @@
 namespace radar_algo {
 namespace {
 
-using Complex = std::complex<float>;
+using Complex = std::complex<double>;
 
 using Probe64 =
     Probe<problem::RadarSettings::kProbeNumX, problem::RadarSettings::kProbeNumY>;
 
-Complex cis(float phase_rad) {
+Complex cis(double phase_rad) {
     return {std::cos(phase_rad), std::sin(phase_rad)};
 }
 
 std::vector<Complex> computeChirpReference(const problem::RadarSettings &radar_settings) {
     std::vector<Complex> chirp(RadarSimulator::kBlockSize);
-    const float chirp_duration_s =
-        static_cast<float>(RadarSimulator::kBlockSize) / radar_settings.sample_rate_hz;
-    const float chirp_slope_hz_per_s = radar_settings.bandwidth_hz / chirp_duration_s;
-    const float sample_period_s = 1.0f / radar_settings.sample_rate_hz;
-    const float a = problem::Constants::kPi * chirp_slope_hz_per_s * sample_period_s *
+    const double chirp_duration_s =
+        static_cast<double>(RadarSimulator::kBlockSize) / radar_settings.sample_rate_hz;
+    const double chirp_slope_hz_per_s = radar_settings.bandwidth_hz / chirp_duration_s;
+    const double sample_period_s = 1.0f / radar_settings.sample_rate_hz;
+    const double a = problem::Constants::kPi * chirp_slope_hz_per_s * sample_period_s *
                     sample_period_s;
-    const float b = -problem::Constants::kPi * radar_settings.bandwidth_hz * sample_period_s;
+    const double b = -problem::Constants::kPi * radar_settings.bandwidth_hz * sample_period_s;
 
     Complex sample(1.0f, 0.0f) ;
     Complex phase_step = cis(a + b);
@@ -45,17 +45,17 @@ std::vector<Complex> computeChirpReference(const problem::RadarSettings &radar_s
 Probe64 makeProbe(const problem::ProblemDescription &description) {
     const auto &radar_settings = description.radar;
     const auto &probe_settings = description.probe;
-    const float lambda_m = problem::Constants::kSpeedOfLightMps / radar_settings.carrier_hz;
-    const float spacing_x_m = probe_settings.spacing_x_wavelengths * lambda_m;
-    const float spacing_y_m = probe_settings.spacing_y_wavelengths * lambda_m;
+    const double lambda_m = problem::Constants::kSpeedOfLightMps / radar_settings.carrier_hz;
+    const double spacing_x_m = probe_settings.spacing_x_wavelengths * lambda_m;
+    const double spacing_y_m = probe_settings.spacing_y_wavelengths * lambda_m;
     return Probe64(probe_settings.center_m, spacing_x_m, spacing_y_m);
 }
 
 } // namespace
 
 std::size_t computeChirpCount(const problem::ProblemDescription &description) {
-    const float chirp_duration_s =
-        static_cast<float>(RadarSimulator::kBlockSize) / description.radar.sample_rate_hz;
+    const double chirp_duration_s =
+        static_cast<double>(RadarSimulator::kBlockSize) / description.radar.sample_rate_hz;
     return static_cast<std::size_t>(
         std::llround(description.simulator.burst_duration_s / chirp_duration_s));
 }
@@ -70,9 +70,9 @@ makeSingleTargetTrackingDescription(const problem::ProblemDescription &base) {
     description.cars = {description.cars.front()};
     description.simulator.vehicle_count = 1;
     description.simulator.random_seed = 0U;
-    description.radar.receiver_noiselevel_stddev = 1.0e-5f;
+    description.radar.receiver_noiselevel_stddev = 1e-9f;
     description.radar.receiver_noiselevel_mean = 0.0f;
-    description.radar.receiver_noise_distribution_stddev = 1.0f;
+    description.radar.receiver_noise_distribution_stddev = 1e-6f;
 
     return description;
 }

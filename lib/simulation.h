@@ -22,9 +22,9 @@ class RadarSimulator {
     using size_t = std::size_t;
 
     static constexpr size_t kTxHistorySize = 8192U;
-    static constexpr size_t kBlockSize = problem::Constants::kRadarBlockSize;
+    static constexpr size_t kBlockSize = problem::RadarSettings::kRadarBlockSize;
 
-    using Complex = std::complex<float>;
+    using Complex = std::complex<double>;
 
     using Vec3 = problem::Vec3;
     using CarSettings = problem::CarSettings;
@@ -81,7 +81,7 @@ class RadarSimulator {
     const std::vector<CarDynamics> &cars() const noexcept {
         return dynamics_;
     }
-    float timeSeconds() const noexcept {
+    double timeSeconds() const noexcept {
         return time_s_;
     }
     const SimulationMetrics &lastMetrics() const noexcept {
@@ -95,9 +95,9 @@ class RadarSimulator {
     template <size_t NumX, size_t NumY>
     ProbeState<NumX, NumY> makeProbeState(const Probe<NumX, NumY> &probe) const;
     DefaultProbeState prepareDefaultProbeState(const ProbeSettings &probe_settings) const;
-    float sampleIntervalSeconds() const noexcept;
+    double sampleIntervalSeconds() const noexcept;
     SimulationMetrics
-    metricsFromObservation(float t_s, const radar::TargetObservation &observation) const noexcept;
+    metricsFromObservation(double t_s, const radar::TargetObservation &observation) const noexcept;
     static std::vector<CarDynamics> makeDynamics(const CarList &car_settings);
     RadarSettings radar_settings_;
     std::vector<CarDynamics> dynamics_;
@@ -106,7 +106,8 @@ class RadarSimulator {
     radar::ReceiverNoiseModel receiver_noise_model_;
     DefaultProbeState default_probe_state_;
     size_t sample_index_ = 0;
-    float time_s_ = 0.0f;
+    double time_s_ = 0.0f;
+    std::vector<radar::TargetObservation> observation_scratch_;
     std::vector<SimulationMetrics> last_metrics_;
 };
 
@@ -138,13 +139,11 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
 
     tx_history_.store(sample_index_, tx_sample);
 
-    const float t_s = time_s_;
-    const float wave_number =
+    const double t_s = time_s_;
+    const double wave_number =
         2.0f * Constants::kPi * radar_settings_.carrier_hz / Constants::kSpeedOfLightMps;
     const bool has_floor = environment_.hasStaticFloorplane();
     std::array<Complex, element_count> noise_samples{};
-    std::vector<radar::TargetObservation> observations(dynamics_.size());
-    std::vector<Complex> reflectivities(dynamics_.size());
 
     receiver_noise_model_.fill(noise_samples);
 
@@ -158,16 +157,14 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
         }
     }
 
-    last_metrics_.resize(dynamics_.size());
     for (std::size_t car_index = 0; car_index < dynamics_.size(); ++car_index) {
         const CarDynamics &car_dynamics = dynamics_[car_index];
-        observations[car_index] = radar::observeTarget(car_dynamics, radar_settings_, t_s);
-        reflectivities[car_index] = car_dynamics.car().reflectivity;
-        last_metrics_[car_index] = metricsFromObservation(t_s, observations[car_index]);
+        observation_scratch_[car_index] = radar::observeTarget(car_dynamics, radar_settings_, t_s);
+        last_metrics_[car_index] = metricsFromObservation(t_s, observation_scratch_[car_index]);
     }
 
     for (int element_index = 0; element_index < static_cast<int>(element_count); ++element_index) {
-        const float weight = probe_state.element_weight(element_index);
+        const double weight = probe_state.element_weight(element_index);
         if (weight == 0.0f) {
             output(element_index) = Complex(0.0f, 0.0f);
             continue;
@@ -175,20 +172,19 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
 
         const auto element_position =
             probe_state.element_positions_m.col(static_cast<Eigen::Index>(element_index));
-        const float element_delay_samples =
-            probe_state.element_delay_samples(element_index);
+        const double element_delay_samples = probe_state.element_delay_samples(element_index);
 
         for (std::size_t car_index = 0; car_index < dynamics_.size(); ++car_index) {
-            output(static_cast<Eigen::Index>(element_index)) += radar::sampleBistaticTargetReturn(
-                observations[car_index],
-                element_position,
-                element_delay_samples,
-                weight,
-                wave_number,
-                radar_settings_,
-                reflectivities[car_index],
-                tx_history_,
-                sample_index_);
+            output(static_cast<Eigen::Index>(element_index)) +=
+                radar::sampleBistaticTargetReturn(observation_scratch_[car_index],
+                                                  element_position,
+                                                  element_delay_samples,
+                                                  weight,
+                                                  wave_number,
+                                                  radar_settings_,
+                                                  dynamics_[car_index].car().reflectivity,
+                                                  tx_history_,
+                                                  sample_index_);
         }
     }
 

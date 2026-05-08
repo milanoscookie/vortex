@@ -32,8 +32,8 @@ template <typename Complex, std::size_t HistorySize> class TxHistoryBuffer {
         }
     }
 
-    Complex delayedSample(size_t sample_index, float delay_samples) const noexcept {
-        const float delayed_index = static_cast<float>(sample_index) - delay_samples;
+    Complex delayedSample(size_t sample_index, double delay_samples) const noexcept {
+        const double delayed_index = static_cast<double>(sample_index) - delay_samples;
         if (delayed_index < 0.0f) {
             return Complex(0.0f, 0.0f);
         }
@@ -44,7 +44,7 @@ template <typename Complex, std::size_t HistorySize> class TxHistoryBuffer {
             return Complex(0.0f, 0.0f);
         }
 
-        const float fraction = delayed_index - static_cast<float>(lower_index);
+        const double fraction = delayed_index - static_cast<double>(lower_index);
         const Complex lower_sample = samples_[lower_index & kMask];
         Complex upper_sample = lower_sample;
         if (upper_index <= sample_index && sample_index - upper_index < HistorySize) {

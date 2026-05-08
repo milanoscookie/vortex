@@ -14,8 +14,8 @@ class CarDynamics {
         return car_;
     }
 
-    Vec3 positionAt(float t_s) const noexcept;
-    Vec3 velocityAt(float t_s) const noexcept;
+    Vec3 positionAt(double t_s) const noexcept;
+    Vec3 velocityAt(double t_s) const noexcept;
 
   private:
     CarSettings car_;

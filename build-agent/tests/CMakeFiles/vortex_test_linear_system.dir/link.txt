@@ -1,1 +1,1 @@
-/usr/bin/c++ -O3 -DNDEBUG -flto=auto -fno-fat-lto-objects -Wl,--dependency-file=CMakeFiles/vortex_test_linear_system.dir/link.d CMakeFiles/vortex_test_linear_system.dir/vortex_test_linear_system.cpp.o -o vortex_test_linear_system
+/usr/bin/c++ -O3 -DNDEBUG -flto=auto -fno-fat-lto-objects -Wl,--dependency-file=CMakeFiles/vortex_test_linear_system.dir/link.d CMakeFiles/vortex_test_linear_system.dir/vortex_test_linear_system.cpp.o -o vortex_test_linear_system  -lfftw3 -lfftw3f

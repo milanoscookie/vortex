@@ -1,2 +1,136 @@
-Start testing: May 07 17:40 CDT
+Start testing: May 07 23:07 CDT
 ----------------------------------------------------------
+1/6 Testing: vortex_test_ring_buffer
+1/6 Test: vortex_test_ring_buffer
+Command: "/home/milan/Documents/DSPClass/radar/build-agent/tests/vortex_test_ring_buffer"
+Directory: /home/milan/Documents/DSPClass/radar/build-agent/tests
+"vortex_test_ring_buffer" start time: May 07 23:07 CDT
+Output:
+----------------------------------------------------------
+
+--- Results ---
+  ✓ empty_on_construction
+  ✓ push_and_front_back
+  ✓ pop_front
+  ✓ overwrite_oldest_when_full
+  ✓ from_back
+  ✓ from_front
+  ✓ bracket_operator
+  ✓ clear
+  ✓ wraparound_stress
+
+9 tests, 0 failures
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"vortex_test_ring_buffer" end time: May 07 23:07 CDT
+"vortex_test_ring_buffer" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/6 Testing: vortex_test_double_buffer_spsc
+2/6 Test: vortex_test_double_buffer_spsc
+Command: "/home/milan/Documents/DSPClass/radar/build-agent/tests/vortex_test_double_buffer_spsc"
+Directory: /home/milan/Documents/DSPClass/radar/build-agent/tests
+"vortex_test_double_buffer_spsc" start time: May 07 23:07 CDT
+Output:
+----------------------------------------------------------
+
+--- Results ---
+  ✓ initial_tryRead_returns_false
+  ✓ publish_then_tryRead
+  ✓ tryRead_returns_false_if_no_new_data
+  ✓ readLatest_always_returns_value
+  ✓ hasNew
+  ✓ sequence_increments
+  ✓ multiple_publishes_latest_wins
+  ✓ beginWrite_commit
+  ✓ works_with_eigen_block
+
+9 tests, 0 failures
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"vortex_test_double_buffer_spsc" end time: May 07 23:07 CDT
+"vortex_test_double_buffer_spsc" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/6 Testing: vortex_test_iir_filter
+3/6 Test: vortex_test_iir_filter
+Command: "/home/milan/Documents/DSPClass/radar/build-agent/tests/vortex_test_iir_filter"
+Directory: /home/milan/Documents/DSPClass/radar/build-agent/tests
+"vortex_test_iir_filter" start time: May 07 23:07 CDT
+Output:
+----------------------------------------------------------
+
+--- Results ---
+  ✓ identity_passthrough_sample
+  ✓ identity_passthrough_block
+  ✓ zero_coeffs_produce_zero
+  ✓ pure_delay_one_sample
+  ✓ feedback_accumulator
+  ✓ setCoefficients
+  ✓ dc_gain
+
+7 tests, 0 failures
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"vortex_test_iir_filter" end time: May 07 23:07 CDT
+"vortex_test_iir_filter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/6 Testing: vortex_test_lp_butterworth
+4/6 Test: vortex_test_lp_butterworth
+Command: "/home/milan/Documents/DSPClass/radar/build-agent/tests/vortex_test_lp_butterworth"
+Directory: /home/milan/Documents/DSPClass/radar/build-agent/tests
+"vortex_test_lp_butterworth" start time: May 07 23:07 CDT
+Output:
+----------------------------------------------------------
+
+--- Results ---
+  ✓ coefficients_valid
+  ✓ dc_gain_is_unity
+  ✓ nyquist_gain_is_zero
+  ✓ lower_cutoff_stronger_attenuation
+  ✓ setCutoffFrequency
+  ✓ identity_when_cutoff_near_nyquist
+  ✓ filter_integration
+
+7 tests, 0 failures
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"vortex_test_lp_butterworth" end time: May 07 23:07 CDT
+"vortex_test_lp_butterworth" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/6 Testing: vortex_test_linear_system
+5/6 Test: vortex_test_linear_system
+Command: "/home/milan/Documents/DSPClass/radar/build-agent/tests/vortex_test_linear_system"
+Directory: /home/milan/Documents/DSPClass/radar/build-agent/tests
+"vortex_test_linear_system" start time: May 07 23:07 CDT
+Output:
+----------------------------------------------------------
+
+--- Results ---
+  ✓ zero_ir_produces_zero
+  ✓ delta_ir_is_passthrough
+  ✓ single_delay
+  ✓ scaling
+  ✓ impulse_response_recovery
+  ✓ setImpulseResponse
+  ✓ linearity
+
+7 tests, 0 failures
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"vortex_test_linear_system" end time: May 07 23:07 CDT
+"vortex_test_linear_system" time elapsed: 00:00:00
+----------------------------------------------------------
+

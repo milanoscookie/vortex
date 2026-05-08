@@ -33,6 +33,6 @@ class Environment {
     float floorplane_beat_frequency_hz_ = 0.0f;
     float floorplane_amplitude_ = 0.0f;
     float floorplane_base_phase_rad_ = 0.0f;
-    std::array<Complex, Constants::kRadarBlockSize> floorplane_samples_{};
+    std::array<Complex, problem::RadarSettings::kRadarBlockSize> floorplane_samples_{};
     bool floorplane_valid_ = false;
 };

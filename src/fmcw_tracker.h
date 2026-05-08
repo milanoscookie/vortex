@@ -4,6 +4,7 @@
 #include "utils/RingBuffer.h"
 
 #include <Eigen/Dense>
+#include <unsupported/Eigen/FFT>
 
 #include <array>
 #include <complex>
@@ -14,26 +15,26 @@
 
 namespace fmcw_tracker {
 
-using Complex = std::complex<float>;
+using Complex = std::complex<double>;
 
 struct RadarConfig {
-    float sample_rate_hz = 0.0f;
-    float carrier_hz = 0.0f;
-    float bandwidth_hz = 0.0f;
-    float chirp_duration_s = 0.0f;
-    float speed_of_light_mps = 0.0f;
+    double sample_rate_hz = 0.0f;
+    double carrier_hz = 0.0f;
+    double bandwidth_hz = 0.0f;
+    double chirp_duration_s = 0.0f;
+    double speed_of_light_mps = 0.0f;
     std::size_t block_size = 0;
     std::size_t chirp_count = 0;
     std::size_t probe_num_x = 0;
     std::size_t probe_num_y = 0;
-    float probe_dx_m = 0.0f;
-    float probe_dy_m = 0.0f;
+    double probe_dx_m = 0.0f;
+    double probe_dy_m = 0.0f;
 
-    float chirpSlopeHzPerS() const noexcept {
+    double chirpSlopeHzPerS() const noexcept {
         return bandwidth_hz / chirp_duration_s;
     }
 
-    float wavelengthM() const noexcept {
+    double wavelengthM() const noexcept {
         return speed_of_light_mps / carrier_hz;
     }
 
@@ -43,41 +44,39 @@ struct RadarConfig {
 };
 
 struct DetectionConfig {
-    float min_range_m = 20.0f;
-    float max_range_m = 500.0f;
+    double min_range_m = 20.0f;
+    double max_range_m = 500.0f;
     std::size_t coherent_processing_interval_chirps = 64;
     std::size_t hop_chirps = 64;
     std::size_t zero_doppler_guard_bins = 2;
     std::size_t nfft_range_min = 4096;
     bool static_clutter_suppression_enable = true;
     bool aoa_enable = true;
-    float azimuth_min_deg = -90.0f;
-    float azimuth_max_deg = 90.0f;
+    double azimuth_min_deg = -90.0f;
+    double azimuth_max_deg = 90.0f;
     std::size_t azimuth_count = 181;
-    float elevation_min_deg = 0.0f;
-    float elevation_max_deg = 90.0f;
-    std::size_t elevation_count = 5001;
+    double elevation_min_deg = 0.0f;
+    double elevation_max_deg = 90.0f;
+    std::size_t elevation_count = 181;
     std::size_t range_gate_bins = 30;
     std::size_t doppler_gate_bins = 10;
-    float range_association_sigma_m = 1.0f;
-    float doppler_association_sigma_hz = 800.0f;
-    float doppler_interp_gate_hz = 5000.0f;
-    float range_interp_gate_m = 10.0f;
-    float azimuth_association_sigma_deg = 12.0f;
-    float elevation_association_sigma_deg = 6.0f;
+    double range_association_sigma_m = 1.0f;
+    double doppler_association_sigma_hz = 800.0f;
+    double doppler_interp_gate_hz = 5000.0f;
+    double range_interp_gate_m = 10.0f;
+    double azimuth_association_sigma_deg = 12.0f;
+    double elevation_association_sigma_deg = 50.0f;
 };
 
 struct BatchResult {
-    static constexpr int kDopplerSliceSize = 2 * 64;
-    static constexpr int kSlowTimeSize = 64;
-    float time_s = 0.0f;
-    float range_m = 0.0f;
-    float doppler_hz = 0.0f;
-    float phase_rad = 0.0f;
-    float predicted_range_m = 0.0f;
-    float predicted_doppler_hz = 0.0f;
-    float range_bin_offset = 0.0f;
-    float doppler_bin_offset = 0.0f;
+    double time_s = 0.0f;
+    double range_m = 0.0f;
+    double doppler_hz = 0.0f;
+    double phase_rad = 0.0f;
+    double predicted_range_m = 0.0f;
+    double predicted_doppler_hz = 0.0f;
+    double range_bin_offset = 0.0f;
+    double doppler_bin_offset = 0.0f;
     bool valid = false;
     problem::Vec3 direction = problem::Vec3::Zero();
     problem::Vec3 predicted_direction = problem::Vec3::Zero();
@@ -85,49 +84,40 @@ struct BatchResult {
     std::size_t doppler_bin = 0;
     std::size_t azimuth_bin = 0;
     std::size_t elevation_bin = 0;
-    Eigen::Matrix<float, kDopplerSliceSize, 1> doppler_slice_power =
-        Eigen::Matrix<float, kDopplerSliceSize, 1>::Zero();
-    Eigen::Matrix<float, kSlowTimeSize, 1> slow_time_phase_rad =
-        Eigen::Matrix<float, kSlowTimeSize, 1>::Zero();
+    std::vector<double> doppler_slice_power;
+    std::vector<double> slow_time_phase_rad;
 };
 
 struct TrackSummary {
     std::vector<BatchResult> batch_results;
-    std::vector<float> times_s;
+    std::vector<double> times_s;
     std::vector<problem::Vec3> raw_positions_m;
     std::vector<problem::Vec3> smoothed_positions_m;
-    std::vector<float> ranges_m;
-    std::vector<float> radial_velocity_mps;
-    std::vector<float> unwrapped_phase_rad;
-    std::vector<float> detrended_phase_rad;
+    std::vector<double> ranges_m;
+    std::vector<double> radial_velocity_mps;
+    std::vector<double> unwrapped_phase_rad;
+    std::vector<double> detrended_phase_rad;
     std::vector<problem::Vec3> cartesian_velocity_mps;
-    std::vector<float> velocity_axis_mps;
+    std::vector<double> velocity_axis_mps;
     std::vector<problem::SimulationMetrics> truth_metrics;
-    float microdoppler_phase_frequency_hz = 0.0f;
-    float microdoppler_truth_frequency_hz = 0.0f;
-    float microdoppler_frequency_rmse_hz = 0.0f;
-    float microdoppler_residual_phase_mean_rad = 0.0f;
-    float microdoppler_residual_phase_rms_rad = 0.0f;
-    float microdoppler_residual_phase_stddev_rad = 0.0f;
-    float microdoppler_peak_power = 0.0f;
+    double microdoppler_phase_frequency_hz = 0.0f;
+    double microdoppler_truth_frequency_hz = 0.0f;
+    double microdoppler_frequency_rmse_hz = 0.0f;
+    double microdoppler_residual_phase_mean_rad = 0.0f;
+    double microdoppler_residual_phase_rms_rad = 0.0f;
+    double microdoppler_residual_phase_stddev_rad = 0.0f;
+    double microdoppler_peak_power = 0.0f;
     std::size_t microdoppler_valid_cpi_count = 0;
-    std::vector<float> microdoppler_candidate_frequency_hz;
-    std::vector<float> microdoppler_candidate_power;
+    std::vector<double> microdoppler_candidate_frequency_hz;
+    std::vector<double> microdoppler_candidate_power;
 };
 
 class StreamingTracker {
   public:
-    static constexpr std::size_t kBlockSize = problem::Constants::kRadarBlockSize;
+    static constexpr std::size_t kBlockSize = problem::RadarSettings::kRadarBlockSize;
     static constexpr std::size_t kNumRx = problem::RadarSettings::kProbeNumElements;
     static constexpr std::size_t kMaxCpiChirps = 256U;
-    static constexpr std::size_t kFixedCpiChirps = 64U;
-    static constexpr std::size_t kFixedRangeNfft = 4096U;
-    static constexpr std::size_t kFixedDopplerFftSize = 2U * kFixedCpiChirps;
-    static constexpr std::size_t kFixedAzimuthCount = 181U;
-    static constexpr std::size_t kFixedElevationCount = 5001U;
-    static constexpr std::size_t kFixedRangeBinCount = 512U;
     using ChirpBlock = std::array<Complex, kBlockSize * kNumRx>;
-    using ChirpReference = std::array<Complex, kBlockSize>;
 
     explicit StreamingTracker(const problem::ProblemDescription &description,
                               DetectionConfig detection_config = {});
@@ -151,14 +141,22 @@ class StreamingTracker {
     TrackSummary buildSummary() const;
 
   private:
+    struct CandidateScoreScratch {
+        std::size_t doppler_bin = 0;
+        std::size_t range_bin = 0;
+        double range_m = 0.0f;
+        double doppler_hz = 0.0f;
+        double score = 0.0f;
+    };
+
     BatchResult processCurrentWindow(std::size_t start_chirp);
 
     struct TrackingState {
         bool initialized = false;
-        float time_s = 0.0f;
-        float range_m = 0.0f;
-        float radial_velocity_mps = 0.0f;
-        float doppler_hz = 0.0f;
+        double time_s = 0.0f;
+        double range_m = 0.0f;
+        double radial_velocity_mps = 0.0f;
+        double doppler_hz = 0.0f;
         problem::Vec3 position_m = problem::Vec3::Zero();
         problem::Vec3 velocity_mps = problem::Vec3::Zero();
         problem::Vec3 direction = problem::Vec3::UnitX();
@@ -166,20 +164,25 @@ class StreamingTracker {
     problem::ProblemDescription description_;
     RadarConfig radar_config_;
     DetectionConfig detection_config_;
-    std::array<int, kFixedRangeBinCount> range_indices_{};
-    Eigen::Matrix<float, kFixedRangeBinCount, 1> range_axis_sliced_m_ =
-        Eigen::Matrix<float, kFixedRangeBinCount, 1>::Zero();
+    std::vector<int> range_indices_;
+    std::vector<double> range_axis_sliced_m_;
     std::size_t range_bin_count_ = 0;
-    ChirpReference range_window_{};
-    Eigen::Matrix<Complex, kFixedCpiChirps, 1> doppler_window_ =
-        Eigen::Matrix<Complex, kFixedCpiChirps, 1>::Zero();
-    Eigen::Matrix<float, kFixedDopplerFftSize, 1> doppler_axis_hz_ =
-        Eigen::Matrix<float, kFixedDopplerFftSize, 1>::Zero();
-    Eigen::Matrix<float, kFixedDopplerFftSize, 1> velocity_axis_mps_ =
-        Eigen::Matrix<float, kFixedDopplerFftSize, 1>::Zero();
+    std::vector<Complex> range_window_;
+    std::vector<Complex> doppler_window_;
+    std::vector<double> doppler_axis_hz_;
+    std::vector<double> velocity_axis_mps_;
     std::vector<Complex> steering_conj_;
     std::vector<problem::Vec3> directions_;
-    ChirpReference tx_conj_{};
+    std::vector<Complex> tx_conj_;
+    Eigen::FFT<double> fft_;
+    std::vector<Complex> range_fft_input_;
+    std::vector<Complex> range_fft_output_;
+    std::vector<Complex> doppler_fft_input_;
+    std::vector<Complex> doppler_fft_output_;
+    std::vector<Complex> spec_scratch_;
+    std::vector<Complex> rd_cube_scratch_;
+    std::vector<double> rd_power_scratch_;
+    std::vector<CandidateScoreScratch> rd_candidates_scratch_;
     bool tx_conj_initialized_ = false;
     std::unique_ptr<RingBuffer<ChirpBlock, kMaxCpiChirps>> chirp_window_;
     std::vector<BatchResult> batch_results_;
@@ -188,6 +191,6 @@ class StreamingTracker {
 };
 
 problem::SimulationMetrics truthAtTime(const problem::ProblemDescription &description,
-                                       float time_s);
+                                       double time_s);
 
 } // namespace fmcw_tracker

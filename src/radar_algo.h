@@ -9,7 +9,7 @@
 
 namespace radar_algo {
 
-using Complex = std::complex<float>;
+using Complex = std::complex<double>;
 using ChirpCallback = std::function<void(std::size_t chirp_index,
                                          std::span<const Complex> tx_chirp,
                                          std::span<const Complex> rx_block)>;

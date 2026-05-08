@@ -10,6 +10,8 @@ target_include_directories(vortex_core PUBLIC
   ${CMAKE_SOURCE_DIR}/src
   ${VORTEX_CORE_INCLUDE_DIRS}
 )
+target_compile_definitions(vortex_core PUBLIC EIGEN_FFTW_DEFAULT)
+target_link_libraries(vortex_core PUBLIC ${VORTEX_CORE_LINK_LIBRARIES})
 
 add_executable(Vortex
   main.cpp

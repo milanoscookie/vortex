@@ -9,7 +9,7 @@
 
 namespace {
 
-float positionErrorNorm(const problem::Vec3 &estimated, const problem::Vec3 &truth) {
+double positionErrorNorm(const problem::Vec3 &estimated, const problem::Vec3 &truth) {
     return (estimated - truth).norm();
 }
 
@@ -36,8 +36,8 @@ TEST(single_target_raw_position_tracks_truth) {
     ASSERT_EQ(summary.batch_results.size(), expected_batches);
     ASSERT_EQ(summary.raw_positions_m.size(), summary.truth_metrics.size());
 
-    float squared_error_sum = 0.0f;
-    float max_error_m = 0.0f;
+    double squared_error_sum = 0.0f;
+    double max_error_m = 0.0f;
     std::size_t valid_batch_count = 0;
     for (std::size_t i = 0; i < summary.raw_positions_m.size(); ++i) {
         const auto &batch = summary.batch_results[i];
@@ -48,14 +48,14 @@ TEST(single_target_raw_position_tracks_truth) {
             ASSERT_TRUE(batch.range_m > 0.0f);
             ASSERT_TRUE(std::isfinite(batch.doppler_hz));
         }
-        const float error_m =
+        const double error_m =
             positionErrorNorm(summary.raw_positions_m[i], summary.truth_metrics[i].position_m);
         squared_error_sum += error_m * error_m;
         max_error_m = std::max(max_error_m, error_m);
     }
 
-    const float rmse_m =
-        std::sqrt(squared_error_sum / static_cast<float>(summary.raw_positions_m.size()));
+    const double rmse_m =
+        std::sqrt(squared_error_sum / static_cast<double>(summary.raw_positions_m.size()));
 
     std::cout << "RMSE: " << rmse_m << " m, max error: " << max_error_m << " m" << std::endl;
     ASSERT_TRUE(valid_batch_count > 0);
@@ -76,7 +76,7 @@ TEST(single_target_microdoppler_frequency_tracks_truth) {
                                   });
 
     const fmcw_tracker::TrackSummary summary = tracker.buildSummary();
-    const float error_hz =
+    const double error_hz =
         std::abs(summary.microdoppler_phase_frequency_hz - summary.microdoppler_truth_frequency_hz);
 
     std::cout << "Micro-Doppler estimate: " << summary.microdoppler_phase_frequency_hz
@@ -102,15 +102,15 @@ TEST(single_target_long_duration_stays_locked) {
 
     const fmcw_tracker::TrackSummary summary = tracker.buildSummary();
 
-    float squared_error_sum = 0.0f;
+    double squared_error_sum = 0.0f;
     for (std::size_t i = 0; i < summary.raw_positions_m.size(); ++i) {
-        const float error_m =
+        const double error_m =
             positionErrorNorm(summary.raw_positions_m[i], summary.truth_metrics[i].position_m);
         squared_error_sum += error_m * error_m;
     }
-    const float rmse_m =
-        std::sqrt(squared_error_sum / static_cast<float>(summary.raw_positions_m.size()));
-    const float microdoppler_error_hz =
+    const double rmse_m =
+        std::sqrt(squared_error_sum / static_cast<double>(summary.raw_positions_m.size()));
+    const double microdoppler_error_hz =
         std::abs(summary.microdoppler_phase_frequency_hz - summary.microdoppler_truth_frequency_hz);
 
     std::cout << "Long-run RMSE: " << rmse_m

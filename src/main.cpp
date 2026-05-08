@@ -53,19 +53,19 @@ problem::Vec3 meanVec3(const std::vector<problem::Vec3> &values) {
     for (const problem::Vec3 &value : values) {
         mean += value;
     }
-    return mean / static_cast<float>(values.size());
+    return mean / static_cast<double>(values.size());
 }
 
-float meanScalar(const std::vector<float> &values) {
+double meanScalar(const std::vector<double> &values) {
     if (values.empty()) {
         return 0.0f;
     }
 
-    float mean = 0.0f;
-    for (float value : values) {
+    double mean = 0.0f;
+    for (double value : values) {
         mean += value;
     }
-    return mean / static_cast<float>(values.size());
+    return mean / static_cast<double>(values.size());
 }
 
 std::vector<problem::Vec3> lineOfSightVelocityVectors(const fmcw_tracker::TrackSummary &summary) {
@@ -100,35 +100,87 @@ truthLineOfSightVelocityVectors(const std::vector<problem::SimulationMetrics> &t
     return velocities;
 }
 
-float rmseVec3(const std::vector<problem::Vec3> &estimates,
+double rmseVec3(const std::vector<problem::Vec3> &estimates,
                const std::vector<problem::SimulationMetrics> &truth) {
     if (estimates.empty() || estimates.size() != truth.size()) {
         return 0.0f;
     }
 
-    float squared_error_sum = 0.0f;
+    double squared_error_sum = 0.0f;
     for (std::size_t i = 0; i < estimates.size(); ++i) {
         squared_error_sum += (estimates[i] - truth[i].position_m).squaredNorm();
     }
-    return std::sqrt(squared_error_sum / static_cast<float>(estimates.size()));
+    return std::sqrt(squared_error_sum / static_cast<double>(estimates.size()));
 }
 
-float rmseRange(const std::vector<float> &ranges_m,
+double rmseRange(const std::vector<double> &ranges_m,
                 const std::vector<problem::SimulationMetrics> &truth) {
     if (ranges_m.empty() || ranges_m.size() != truth.size()) {
         return 0.0f;
     }
 
-    float squared_error_sum = 0.0f;
+    double squared_error_sum = 0.0f;
     for (std::size_t i = 0; i < ranges_m.size(); ++i) {
-        const float error_m = ranges_m[i] - truth[i].range_m;
+        const double error_m = ranges_m[i] - truth[i].range_m;
         squared_error_sum += error_m * error_m;
     }
-    return std::sqrt(squared_error_sum / static_cast<float>(ranges_m.size()));
+    return std::sqrt(squared_error_sum / static_cast<double>(ranges_m.size()));
 }
 
-std::string formatFrequencyCandidates(const std::vector<float> &frequencies_hz,
-                                      const std::vector<float> &powers) {
+double degrees(double radians) {
+    return radians * 180.0f / problem::Constants::kPi;
+}
+
+double azimuthDeg(const problem::Vec3 &direction) {
+    return degrees(std::atan2(direction.y(), direction.x()));
+}
+
+double elevationDeg(const problem::Vec3 &direction) {
+    return degrees(std::atan2(direction.z(), std::hypot(direction.x(), direction.y())));
+}
+
+double wrapAngleDeg(double angle_deg) {
+    while (angle_deg > 180.0f) {
+        angle_deg -= 360.0f;
+    }
+    while (angle_deg < -180.0f) {
+        angle_deg += 360.0f;
+    }
+    return angle_deg;
+}
+
+double rmseAzimuthDeg(const std::vector<fmcw_tracker::BatchResult> &batches,
+                     const std::vector<problem::SimulationMetrics> &truth) {
+    if (batches.empty() || batches.size() != truth.size()) {
+        return 0.0f;
+    }
+
+    double squared_error_sum = 0.0f;
+    for (std::size_t i = 0; i < batches.size(); ++i) {
+        const double error_deg =
+            wrapAngleDeg(azimuthDeg(batches[i].direction) - azimuthDeg(truth[i].line_of_sight));
+        squared_error_sum += error_deg * error_deg;
+    }
+    return std::sqrt(squared_error_sum / static_cast<double>(batches.size()));
+}
+
+double rmseElevationDeg(const std::vector<fmcw_tracker::BatchResult> &batches,
+                       const std::vector<problem::SimulationMetrics> &truth) {
+    if (batches.empty() || batches.size() != truth.size()) {
+        return 0.0f;
+    }
+
+    double squared_error_sum = 0.0f;
+    for (std::size_t i = 0; i < batches.size(); ++i) {
+        const double error_deg =
+            elevationDeg(batches[i].direction) - elevationDeg(truth[i].line_of_sight);
+        squared_error_sum += error_deg * error_deg;
+    }
+    return std::sqrt(squared_error_sum / static_cast<double>(batches.size()));
+}
+
+std::string formatFrequencyCandidates(const std::vector<double> &frequencies_hz,
+                                      const std::vector<double> &powers) {
     std::ostringstream out;
     out << '[';
     const std::size_t count = std::min(frequencies_hz.size(), powers.size());
@@ -216,6 +268,10 @@ int main(int argc, char **argv) {
         std::cout << "RMSE raw XYZ: " << rmseVec3(summary.raw_positions_m, summary.truth_metrics)
                   << " m\n";
         std::cout << "RMSE range: " << rmseRange(summary.ranges_m, summary.truth_metrics) << " m\n";
+        std::cout << "RMSE azimuth: "
+                  << rmseAzimuthDeg(summary.batch_results, summary.truth_metrics) << " deg\n";
+        std::cout << "RMSE elevation: "
+                  << rmseElevationDeg(summary.batch_results, summary.truth_metrics) << " deg\n";
     } catch (const std::exception &ex) {
         std::cerr << "Radar demo failed: " << ex.what() << '\n';
         return 1;

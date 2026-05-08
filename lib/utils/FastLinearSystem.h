@@ -2,6 +2,9 @@
 
 #include "dsp_config.h"
 #include <Eigen/Dense>
+#ifndef EIGEN_FFTW_DEFAULT
+#define EIGEN_FFTW_DEFAULT
+#endif
 #include <unsupported/Eigen/FFT>
 
 // Fast convolution using overlap-add FFT method
