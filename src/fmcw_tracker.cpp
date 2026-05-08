@@ -92,13 +92,8 @@ std::vector<double> fftFreq(std::size_t nfft, double sample_period_s) {
     return freqs;
 }
 
-template <typename T> void fftShiftInPlace(std::vector<T> &values) {
-    if (values.empty()) {
-        return;
-    }
-    std::rotate(values.begin(),
-                values.begin() + static_cast<std::ptrdiff_t>(values.size() / 2),
-                values.end());
+std::size_t centeredBinToFftIndex(std::size_t centered_bin, std::size_t nfft) {
+    return (centered_bin + nfft / 2U) % nfft;
 }
 
 std::size_t cubeIndex(std::size_t outer,
@@ -128,6 +123,8 @@ std::vector<Vec3> elementPositions(const RadarConfig &cfg) {
 struct SteeringGrid {
     std::vector<Complex> steering_conj;
     std::vector<Vec3> directions;
+    std::vector<double> azimuth_deg;
+    std::vector<double> elevation_deg;
 };
 
 SteeringGrid makeSteeringGrid(const RadarConfig &cfg, const DetectionConfig &det) {
@@ -140,6 +137,8 @@ SteeringGrid makeSteeringGrid(const RadarConfig &cfg, const DetectionConfig &det
     SteeringGrid grid;
     grid.steering_conj.reserve(det.azimuth_count * det.elevation_count * cfg.numRx());
     grid.directions.reserve(det.azimuth_count * det.elevation_count);
+    grid.azimuth_deg.reserve(det.azimuth_count * det.elevation_count);
+    grid.elevation_deg.reserve(det.azimuth_count * det.elevation_count);
 
     for (double az_deg : az_rad) {
         const double az = az_deg * problem::Constants::kPi / 180.0f;
@@ -150,6 +149,8 @@ SteeringGrid makeSteeringGrid(const RadarConfig &cfg, const DetectionConfig &det
             direction.y() = std::cos(el) * std::sin(az);
             direction.z() = std::sin(el);
             grid.directions.push_back(direction);
+            grid.azimuth_deg.push_back(az_deg);
+            grid.elevation_deg.push_back(el_deg);
 
             for (const Vec3 &position : positions_m) {
                 const double phase =
@@ -905,29 +906,53 @@ StreamingTracker::StreamingTracker(const problem::ProblemDescription &descriptio
         throw std::runtime_error("tracker range gate produced no bins");
     }
 
-    range_window_ = makeComplexWindow(hannWindow(radar_config_.block_size));
+    const std::vector<Complex> range_window =
+        makeComplexWindow(hannWindow(radar_config_.block_size));
     doppler_window_ =
         makeComplexWindow(hannWindow(detection_config_.coherent_processing_interval_chirps));
-    tx_conj_.assign(radar_config_.block_size, Complex(0.0f, 0.0f));
+    range_mix_coeff_.resize(radar_config_.block_size, Complex(0.0f, 0.0f));
 
     const SteeringGrid grid = makeSteeringGrid(radar_config_, detection_config_);
     steering_conj_ = grid.steering_conj;
     directions_ = grid.directions;
+    direction_azimuth_deg_ = grid.azimuth_deg;
+    direction_elevation_deg_ = grid.elevation_deg;
 
     // Doppler axis: zero-pad to 2x CPI for finer frequency resolution
     // (~305 Hz/bin instead of ~610 Hz/bin). The truth model uses
     // f_D = 2*v_r/lambda (positive = approaching). The FFT on the beat-signal
     // slow-time produces the opposite sign, so we negate the axis.
     const std::size_t nfft_doppler = 2U * detection_config_.coherent_processing_interval_chirps;
-    doppler_axis_hz_ = fftFreq(nfft_doppler, radar_config_.chirp_duration_s);
-    fftShiftInPlace(doppler_axis_hz_);
-    for (std::size_t i = 0; i < doppler_axis_hz_.size(); ++i) {
-        doppler_axis_hz_[i] = -doppler_axis_hz_[i];
+    const std::vector<double> doppler_axis_native_hz =
+        fftFreq(nfft_doppler, radar_config_.chirp_duration_s);
+    doppler_axis_hz_.resize(nfft_doppler, 0.0f);
+    for (std::size_t centered_bin = 0; centered_bin < nfft_doppler; ++centered_bin) {
+        doppler_axis_hz_[centered_bin] =
+            -doppler_axis_native_hz[centeredBinToFftIndex(centered_bin, nfft_doppler)];
     }
 
     velocity_axis_mps_.resize(doppler_axis_hz_.size(), 0.0f);
     for (std::size_t i = 0; i < velocity_axis_mps_.size(); ++i) {
         velocity_axis_mps_[i] = 0.5f * doppler_axis_hz_[i] * radar_config_.wavelengthM();
+    }
+
+    const std::size_t n_chirps = detection_config_.coherent_processing_interval_chirps;
+    const std::size_t num_rx = radar_config_.numRx();
+    const std::size_t nfft_range = detection_config_.nfft_range_min;
+    range_fft_input_.resize(nfft_range, Complex(0.0f, 0.0f));
+    range_fft_output_.reserve(nfft_range);
+    doppler_fft_input_.resize(nfft_doppler, Complex(0.0f, 0.0f));
+    doppler_fft_output_.reserve(nfft_doppler);
+    spec_scratch_.resize(n_chirps * range_bin_count_ * num_rx);
+    rd_cube_scratch_.resize(nfft_doppler * range_bin_count_ * num_rx);
+    clutter_mean_scratch_.resize(range_bin_count_ * num_rx, Complex(0.0f, 0.0f));
+    rd_power_scratch_.resize(nfft_doppler * range_bin_count_);
+    rd_candidates_scratch_.reserve(range_bin_count_ * nfft_doppler);
+
+    if (!range_mix_coeff_initialized_) {
+        for (std::size_t i = 0; i < radar_config_.block_size; ++i) {
+            range_mix_coeff_[i] = range_window[i];
+        }
     }
 
     // The simulator keeps a continuous TX history, so the first fast-time
@@ -947,11 +972,11 @@ StreamingTracker::StreamingTracker(const problem::ProblemDescription &descriptio
 void StreamingTracker::pushChirp(std::size_t chirp_index,
                                  std::span<const Complex> tx_chirp,
                                  std::span<const Complex> rx_block) {
-    if (!tx_conj_initialized_) {
+    if (!range_mix_coeff_initialized_) {
         for (std::size_t i = 0; i < tx_chirp.size(); ++i) {
-            tx_conj_[i] = std::conj(tx_chirp[i]);
+            range_mix_coeff_[i] *= std::conj(tx_chirp[i]);
         }
-        tx_conj_initialized_ = true;
+        range_mix_coeff_initialized_ = true;
     }
 
     if (tx_chirp.size() != radar_config_.block_size) {
@@ -1091,54 +1116,87 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
     const std::size_t n_chirps = detection_config_.coherent_processing_interval_chirps;
     const std::size_t nfft_doppler = n_chirps * 2U;
     const std::size_t num_rx = radar_config_.numRx();
-    const std::size_t nfft = detection_config_.nfft_range_min;
     const std::size_t range_count = range_bin_count_;
 
     // Range FFT: dechirp, window, and transform each chirp.
-    std::vector<Complex> spec(n_chirps * range_count * num_rx, Complex(0.0f, 0.0f));
-    Eigen::FFT<double> fft;
-    std::vector<Complex> fft_input(nfft, Complex(0.0f, 0.0f));
-    std::vector<Complex> fft_output;
+    std::vector<Complex> &spec = spec_scratch_;
+    std::vector<Complex> &fft_input = range_fft_input_;
+    std::vector<Complex> &fft_output = range_fft_output_;
+    std::vector<Complex> &clutter_mean = clutter_mean_scratch_;
+    const std::size_t chirp_stride = range_count * num_rx;
+    std::fill(clutter_mean.begin(), clutter_mean.end(), Complex(0.0f, 0.0f));
 
     for (std::size_t chirp = 0; chirp < n_chirps; ++chirp) {
         const ChirpBlock &rx_block = (*chirp_window_)[chirp];
         for (std::size_t rx = 0; rx < num_rx; ++rx) {
-            std::fill(fft_input.begin(), fft_input.end(), Complex(0.0f, 0.0f));
+            std::fill_n(fft_input.begin(), range_wrap_guard_samples_, Complex(0.0f, 0.0f));
             for (std::size_t sample = range_wrap_guard_samples_; sample < radar_config_.block_size;
                  ++sample) {
-                const Complex beat = rx_block[sample * num_rx + rx] * tx_conj_[sample];
-                fft_input[sample] = beat * range_window_[sample];
+                fft_input[sample] = rx_block[sample * num_rx + rx] * range_mix_coeff_[sample];
             }
 
-            fft.fwd(fft_output, fft_input);
+            std::fill(fft_input.begin() + static_cast<std::ptrdiff_t>(radar_config_.block_size),
+                      fft_input.end(),
+                      Complex(0.0f, 0.0f));
+
+            fft_.fwd(fft_output, fft_input);
+            const std::size_t chirp_base = chirp * chirp_stride;
             for (std::size_t r = 0; r < range_count; ++r) {
-                spec[cubeIndex(chirp, r, rx, range_count, num_rx)] =
-                    fft_output[static_cast<std::size_t>(range_indices_[r])];
+                const Complex value = fft_output[static_cast<std::size_t>(range_indices_[r])];
+                const std::size_t spec_index = chirp_base + r * num_rx + rx;
+                spec[spec_index] = value;
+                clutter_mean[r * num_rx + rx] += value;
             }
         }
     }
+
+    constexpr double kScoreEpsilon = 1.0e-12f;
+    constexpr std::size_t kMaxRangeDopplerCandidates = 6;
 
     // Static-clutter suppression: remove DC (mean) across slow-time.
     if (detection_config_.static_clutter_suppression_enable) {
-        for (std::size_t r = 0; r < range_count; ++r) {
-            for (std::size_t rx = 0; rx < num_rx; ++rx) {
-                Complex mean(0.0f, 0.0f);
-                for (std::size_t chirp = 0; chirp < n_chirps; ++chirp) {
-                    mean += spec[cubeIndex(chirp, r, rx, range_count, num_rx)];
-                }
-                mean /= static_cast<double>(n_chirps);
-                for (std::size_t chirp = 0; chirp < n_chirps; ++chirp) {
-                    spec[cubeIndex(chirp, r, rx, range_count, num_rx)] -= mean;
-                }
+        const double inv_n_chirps = 1.0 / static_cast<double>(n_chirps);
+        for (Complex &mean : clutter_mean) {
+            mean *= inv_n_chirps;
+        }
+        for (std::size_t chirp = 0; chirp < n_chirps; ++chirp) {
+            const std::size_t chirp_base = chirp * chirp_stride;
+            for (std::size_t idx = 0; idx < chirp_stride; ++idx) {
+                spec[chirp_base + idx] -= clutter_mean[idx];
             }
         }
     }
 
+    auto insertCandidate =
+        [](std::array<CandidateScoreScratch, kMaxRangeDopplerCandidates> &top_candidates,
+           std::size_t &top_candidate_count,
+           const CandidateScoreScratch &candidate) {
+            std::size_t insert_pos = top_candidate_count;
+            if (top_candidate_count == kMaxRangeDopplerCandidates) {
+                if (candidate.score <= top_candidates[top_candidate_count - 1U].score) {
+                    return;
+                }
+                insert_pos = top_candidate_count - 1U;
+            } else {
+                ++top_candidate_count;
+            }
+
+            while (insert_pos > 0U && candidate.score > top_candidates[insert_pos - 1U].score) {
+                top_candidates[insert_pos] = top_candidates[insert_pos - 1U];
+                --insert_pos;
+            }
+            top_candidates[insert_pos] = candidate;
+        };
+
+    std::array<CandidateScoreScratch, kMaxRangeDopplerCandidates> top_candidates{};
+    std::size_t top_candidate_count = 0U;
+
     // Doppler FFT: zero-padded to 2x CPI for finer Doppler resolution.
-    std::vector<Complex> rd_cube(nfft_doppler * range_count * num_rx, Complex(0.0f, 0.0f));
-    std::vector<double> rd_power(nfft_doppler * range_count, 0.0f);
-    std::vector<Complex> doppler_input(nfft_doppler, Complex(0.0f, 0.0f));
-    std::vector<Complex> doppler_output;
+    std::vector<Complex> &rd_cube = rd_cube_scratch_;
+    std::vector<double> &rd_power = rd_power_scratch_;
+    std::vector<Complex> &doppler_input = doppler_fft_input_;
+    std::vector<Complex> &doppler_output = doppler_fft_output_;
+    std::fill(rd_power.begin(), rd_power.end(), 0.0f);
 
     for (std::size_t r = 0; r < range_count; ++r) {
         for (std::size_t rx = 0; rx < num_rx; ++rx) {
@@ -1146,13 +1204,14 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
                 doppler_input[chirp] =
                     spec[cubeIndex(chirp, r, rx, range_count, num_rx)] * doppler_window_[chirp];
             }
-            // Remaining doppler_input entries are zero (zero-padding).
+            std::fill(doppler_input.begin() + static_cast<std::ptrdiff_t>(n_chirps),
+                      doppler_input.end(),
+                      Complex(0.0f, 0.0f));
 
-            fft.fwd(doppler_output, doppler_input);
-            fftShiftInPlace(doppler_output);
+            fft_.fwd(doppler_output, doppler_input);
 
             for (std::size_t dbin = 0; dbin < nfft_doppler; ++dbin) {
-                const Complex value = doppler_output[dbin];
+                const Complex value = doppler_output[centeredBinToFftIndex(dbin, nfft_doppler)];
                 rd_cube[cubeIndex(dbin, r, rx, range_count, num_rx)] = value;
                 rd_power[dbin * range_count + r] += std::norm(value);
             }
@@ -1162,18 +1221,6 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
     for (double &power : rd_power) {
         power /= static_cast<double>(num_rx);
     }
-
-    // Candidate scoring over the full RD plane.
-    struct CandidateScore {
-        std::size_t doppler_bin = 0;
-        std::size_t range_bin = 0;
-        double range_m = 0.0f;
-        double doppler_hz = 0.0f;
-        double score = std::numeric_limits<double>::lowest();
-    };
-
-    constexpr double kScoreEpsilon = 1.0e-12f;
-    constexpr std::size_t kMaxRangeDopplerCandidates = 6;
 
     const std::size_t zero_doppler_bin = nfft_doppler / 2;
     double predicted_range_m = 0.0f;
@@ -1223,9 +1270,6 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
         center_dbin = nearestAxisBin(doppler_axis_hz_, predicted_doppler_hz);
     }
 
-    std::vector<CandidateScore> rd_candidates;
-    rd_candidates.reserve(std::min(doppler_gate, nfft_doppler) * std::min(range_gate, range_count));
-
     const std::size_t r_start = (center_rbin > range_gate / 2) ? center_rbin - range_gate / 2 : 0;
     const std::size_t r_end = std::min(range_count, center_rbin + range_gate / 2 + 1);
     const std::size_t d_start =
@@ -1261,34 +1305,29 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
                                             detection_config_.doppler_association_sigma_hz);
             }
 
-            CandidateScore candidate;
+            CandidateScoreScratch candidate;
             candidate.doppler_bin = dbin;
             candidate.range_bin = rbin;
             candidate.range_m = candidate_range_m;
             candidate.doppler_hz = candidate_doppler_hz;
             candidate.score = score;
-            rd_candidates.push_back(candidate);
+            insertCandidate(top_candidates, top_candidate_count, candidate);
         }
     }
 
-    if (rd_candidates.empty()) {
+    if (top_candidate_count == 0U) {
         throw std::runtime_error("tracker failed to find a valid range-doppler peak");
     }
 
-    const std::size_t candidate_count = std::min(kMaxRangeDopplerCandidates, rd_candidates.size());
-    std::partial_sort(
-        rd_candidates.begin(),
-        rd_candidates.begin() + candidate_count,
-        rd_candidates.end(),
-        [](const CandidateScore &lhs, const CandidateScore &rhs) { return lhs.score > rhs.score; });
+    const std::size_t candidate_count = top_candidate_count;
 
     // Select best candidate and run AoA beamforming.
     double best_total_score = std::numeric_limits<double>::lowest();
-    std::size_t best_doppler_bin = rd_candidates.front().doppler_bin;
-    std::size_t best_range_bin = rd_candidates.front().range_bin;
+    std::size_t best_doppler_bin = top_candidates.front().doppler_bin;
+    std::size_t best_range_bin = top_candidates.front().range_bin;
     std::size_t best_direction_index = 0;
-    double best_range_m = rd_candidates.front().range_m;
-    double best_doppler_hz = rd_candidates.front().doppler_hz;
+    double best_range_m = top_candidates.front().range_m;
+    double best_doppler_hz = top_candidates.front().doppler_hz;
     std::array<Complex, kNumRx> best_snapshot{};
     Vec3 best_direction = tracking_state_.initialized ? tracking_state_.direction : Vec3::UnitX();
 
@@ -1296,7 +1335,7 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
     const double predicted_elevation_deg = elevationDeg(predicted_direction);
 
     for (std::size_t candidate_index = 0; candidate_index < candidate_count; ++candidate_index) {
-        const CandidateScore &candidate = rd_candidates[candidate_index];
+        const CandidateScoreScratch &candidate = top_candidates[candidate_index];
         std::array<Complex, kNumRx> snapshot{};
         for (std::size_t rx = 0; rx < num_rx; ++rx) {
             snapshot[rx] = rd_cube[cubeIndex(
@@ -1329,11 +1368,11 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
                 double direction_score = std::log(std::norm(response) + kScoreEpsilon);
                 if (tracking_state_.initialized) {
                     direction_score += associationPenalty(
-                        angleDifferenceDeg(azimuthDeg(directions_[direction_index]),
+                        angleDifferenceDeg(direction_azimuth_deg_[direction_index],
                                            predicted_azimuth_deg),
                         detection_config_.azimuth_association_sigma_deg);
                     direction_score += associationPenalty(
-                        elevationDeg(directions_[direction_index]) - predicted_elevation_deg,
+                        direction_elevation_deg_[direction_index] - predicted_elevation_deg,
                         detection_config_.elevation_association_sigma_deg);
                 }
 
@@ -1362,11 +1401,11 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
                     double direction_score = std::log(std::norm(response) + kScoreEpsilon);
                     if (tracking_state_.initialized) {
                         direction_score += associationPenalty(
-                            angleDifferenceDeg(azimuthDeg(directions_[direction_index]),
+                            angleDifferenceDeg(direction_azimuth_deg_[direction_index],
                                                predicted_azimuth_deg),
                             detection_config_.azimuth_association_sigma_deg);
                         direction_score += associationPenalty(
-                            elevationDeg(directions_[direction_index]) - predicted_elevation_deg,
+                            direction_elevation_deg_[direction_index] - predicted_elevation_deg,
                             detection_config_.elevation_association_sigma_deg);
                     }
 

@@ -167,13 +167,14 @@ class StreamingTracker {
     std::vector<int> range_indices_;
     std::vector<double> range_axis_sliced_m_;
     std::size_t range_bin_count_ = 0;
-    std::vector<Complex> range_window_;
     std::vector<Complex> doppler_window_;
     std::vector<double> doppler_axis_hz_;
     std::vector<double> velocity_axis_mps_;
     std::vector<Complex> steering_conj_;
     std::vector<problem::Vec3> directions_;
-    std::vector<Complex> tx_conj_;
+    std::vector<double> direction_azimuth_deg_;
+    std::vector<double> direction_elevation_deg_;
+    std::vector<Complex> range_mix_coeff_;
     Eigen::FFT<double> fft_;
     std::vector<Complex> range_fft_input_;
     std::vector<Complex> range_fft_output_;
@@ -181,9 +182,10 @@ class StreamingTracker {
     std::vector<Complex> doppler_fft_output_;
     std::vector<Complex> spec_scratch_;
     std::vector<Complex> rd_cube_scratch_;
+    std::vector<Complex> clutter_mean_scratch_;
     std::vector<double> rd_power_scratch_;
     std::vector<CandidateScoreScratch> rd_candidates_scratch_;
-    bool tx_conj_initialized_ = false;
+    bool range_mix_coeff_initialized_ = false;
     std::unique_ptr<RingBuffer<ChirpBlock, kMaxCpiChirps>> chirp_window_;
     std::vector<BatchResult> batch_results_;
     TrackingState tracking_state_;
