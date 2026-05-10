@@ -1,117 +1,15 @@
 #pragma once
 
+#include "fmcw_tracker_internal.h"
+#include "fmcw_tracker_types.h"
 #include "problem_description.h"
 #include "utils/RingBuffer.h"
 
-#include <Eigen/Dense>
-#include <unsupported/Eigen/FFT>
-
 #include <array>
-#include <complex>
-#include <cstddef>
 #include <memory>
 #include <span>
-#include <vector>
 
 namespace fmcw_tracker {
-
-using Real = problem::Real;
-using Complex = problem::SignalComplex;
-
-struct RadarConfig {
-    Real sample_rate_hz = 0.0f;
-    Real carrier_hz = 0.0f;
-    Real bandwidth_hz = 0.0f;
-    Real chirp_duration_s = 0.0f;
-    Real speed_of_light_mps = 0.0f;
-    std::size_t block_size = 0;
-    std::size_t chirp_count = 0;
-    std::size_t probe_num_x = 0;
-    std::size_t probe_num_y = 0;
-    Real probe_dx_m = 0.0f;
-    Real probe_dy_m = 0.0f;
-
-    Real chirpSlopeHzPerS() const noexcept {
-        return bandwidth_hz / chirp_duration_s;
-    }
-
-    Real wavelengthM() const noexcept {
-        return speed_of_light_mps / carrier_hz;
-    }
-
-    std::size_t numRx() const noexcept {
-        return probe_num_x * probe_num_y;
-    }
-};
-
-struct DetectionConfig {
-    Real min_range_m = 20.0f;
-    Real max_range_m = 500.0f;
-    std::size_t coherent_processing_interval_chirps = 64;
-    std::size_t hop_chirps = 64;
-    std::size_t zero_doppler_guard_bins = 2;
-    std::size_t nfft_range_min = 4096;
-    bool static_clutter_suppression_enable = true;
-    bool aoa_enable = true;
-    Real azimuth_min_deg = -90.0f;
-    Real azimuth_max_deg = 90.0f;
-    std::size_t azimuth_count = 181;
-    Real elevation_min_deg = 0.0f;
-    Real elevation_max_deg = 90.0f;
-    std::size_t elevation_count = 181;
-    std::size_t range_gate_bins = 30;
-    std::size_t doppler_gate_bins = 10;
-    Real range_association_sigma_m = 1.0f;
-    Real doppler_association_sigma_hz = 800.0f;
-    Real doppler_interp_gate_hz = 5000.0f;
-    Real range_interp_gate_m = 10.0f;
-    Real azimuth_association_sigma_deg = 12.0f;
-    Real elevation_association_sigma_deg = 50.0f;
-};
-
-struct BatchResult {
-    Real time_s = 0.0f;
-    Real range_m = 0.0f;
-    Real doppler_hz = 0.0f;
-    Real phase_rad = 0.0f;
-    Real predicted_range_m = 0.0f;
-    Real predicted_doppler_hz = 0.0f;
-    Real range_bin_offset = 0.0f;
-    Real doppler_bin_offset = 0.0f;
-    bool valid = false;
-    problem::Vec3 direction = problem::Vec3::Zero();
-    problem::Vec3 predicted_direction = problem::Vec3::Zero();
-    std::size_t range_bin = 0;
-    std::size_t doppler_bin = 0;
-    std::size_t azimuth_bin = 0;
-    std::size_t elevation_bin = 0;
-    std::vector<Real> doppler_slice_power;
-    std::vector<Real> slow_time_phase_rad;
-};
-
-struct TrackSummary {
-    std::vector<BatchResult> batch_results;
-    std::vector<double> times_s;
-    std::vector<problem::Vec3> raw_positions_m;
-    std::vector<problem::Vec3> smoothed_positions_m;
-    std::vector<double> ranges_m;
-    std::vector<double> radial_velocity_mps;
-    std::vector<double> unwrapped_phase_rad;
-    std::vector<double> detrended_phase_rad;
-    std::vector<problem::Vec3> cartesian_velocity_mps;
-    std::vector<double> velocity_axis_mps;
-    std::vector<problem::SimulationMetrics> truth_metrics;
-    double microdoppler_phase_frequency_hz = 0.0f;
-    double microdoppler_truth_frequency_hz = 0.0f;
-    double microdoppler_frequency_rmse_hz = 0.0f;
-    double microdoppler_residual_phase_mean_rad = 0.0f;
-    double microdoppler_residual_phase_rms_rad = 0.0f;
-    double microdoppler_residual_phase_stddev_rad = 0.0f;
-    double microdoppler_peak_power = 0.0f;
-    std::size_t microdoppler_valid_cpi_count = 0;
-    std::vector<double> microdoppler_candidate_frequency_hz;
-    std::vector<double> microdoppler_candidate_power;
-};
 
 class StreamingTracker {
   public:
@@ -135,39 +33,39 @@ class StreamingTracker {
         return detection_config_;
     }
 
-    const std::vector<BatchResult> &batchResults() const noexcept {
-        return batch_results_;
+    const std::vector<SceneBatchResult> &sceneBatchResults() const noexcept {
+        return scene_batch_results_;
+    }
+
+    const std::vector<int> &rangeIndices() const noexcept {
+        return range_indices_;
     }
 
     TrackSummary buildSummary() const;
+    SceneSummary buildSceneSummary() const;
+
+    struct AoAPeak {
+        Real azimuth_deg;
+        Real elevation_deg;
+        Real score;
+        problem::Vec3 direction;
+    };
+    std::vector<AoAPeak> estimateTopAoAs(std::span<const Complex> snapshot, std::size_t n) const;
+    std::size_t getRangeBin(Real range_m) const;
+    Complex computeRangeFftBin(std::span<const Complex> dechirped_chirp, std::size_t rx, std::size_t range_bin) const;
 
   private:
-    struct CandidateScoreScratch {
-        std::size_t doppler_bin = 0;
-        std::size_t range_bin = 0;
-        Real range_m = 0.0f;
-        Real doppler_hz = 0.0f;
-        Real score = 0.0f;
-    };
+    detail::SceneObservation processCurrentWindow(std::size_t start_chirp);
+    void updateTracks(const detail::SceneObservation &observation);
+    std::vector<problem::SimulationMetrics> truthSceneAtTime(Real time_s) const;
 
-    BatchResult processCurrentWindow(std::size_t start_chirp);
-
-    struct TrackingState {
-        bool initialized = false;
-        Real time_s = 0.0f;
-        Real range_m = 0.0f;
-        Real radial_velocity_mps = 0.0f;
-        Real doppler_hz = 0.0f;
-        problem::Vec3 position_m = problem::Vec3::Zero();
-        problem::Vec3 velocity_mps = problem::Vec3::Zero();
-        problem::Vec3 direction = problem::Vec3::UnitX();
-    };
     problem::ProblemDescription description_;
     RadarConfig radar_config_;
     DetectionConfig detection_config_;
     std::vector<int> range_indices_;
     std::vector<Real> range_axis_sliced_m_;
     std::size_t range_bin_count_ = 0;
+    std::vector<Complex> range_window_;
     std::vector<Complex> doppler_window_;
     std::vector<Real> doppler_axis_hz_;
     std::vector<Real> velocity_axis_mps_;
@@ -175,7 +73,6 @@ class StreamingTracker {
     std::vector<problem::Vec3> directions_;
     std::vector<Real> direction_azimuth_deg_;
     std::vector<Real> direction_elevation_deg_;
-    std::vector<Complex> range_mix_coeff_;
     Eigen::FFT<Real> fft_;
     std::vector<Complex> range_fft_input_;
     std::vector<Complex> range_fft_output_;
@@ -185,14 +82,17 @@ class StreamingTracker {
     std::vector<Complex> rd_cube_scratch_;
     std::vector<Complex> clutter_mean_scratch_;
     std::vector<Real> rd_power_scratch_;
-    std::vector<CandidateScoreScratch> rd_candidates_scratch_;
-    bool range_mix_coeff_initialized_ = false;
+    std::vector<detail::CandidateScoreScratch> rd_candidates_scratch_;
     std::unique_ptr<RingBuffer<ChirpBlock, kMaxCpiChirps>> chirp_window_;
-    std::vector<BatchResult> batch_results_;
-    TrackingState tracking_state_;
+    std::vector<SceneBatchResult> scene_batch_results_;
+    std::vector<detail::TrackState> active_tracks_;
+    std::vector<detail::TrackState> finished_tracks_;
+    std::vector<DeletedTrackGhost> deleted_track_ghosts_;
+    std::size_t next_track_id_ = 1;
     std::size_t range_wrap_guard_samples_ = 0;
 };
 
-problem::SimulationMetrics truthAtTime(const problem::ProblemDescription &description, Real time_s);
+problem::SimulationMetrics
+truthAtTime(const problem::ProblemDescription &description, Real time_s, std::size_t car_index = 0);
 
 } // namespace fmcw_tracker

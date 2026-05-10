@@ -1,14 +1,14 @@
 # Multi-Car Radar Tracking Algorithm Reference
 
 This document is a design reference for extending the current FMCW radar pipeline to track multiple cars simultaneously.
-It is written to stay consistent with the signal conventions and implementation realities already documented in `docs/car_tracking_algorithm_reference.md`, while describing a detector-cluster-associate-smooth-manage architecture suitable for multiple targets without relying on an Extended Kalman Filter (EKF).
+It is written to stay consistent with the signal conventions and implementation realities already documented in `docs/car_tracking_algorithm_reference.md`, while describing a detector-cluster-associate-smooth-manage architecture suitable for multiple targets without relying on full Extended Kalman Filter (EKF) covariance machinery.
 
 ## 1) Scope and Design Goal
 
 The goal is to estimate a time-varying set of car trajectories
 
 \[
-\mathcal{T}_k = \{\tau_k^{(1)}, \tau_k^{(2)}, \dots, \tau_k^{(N_k)}\}
+\mathcal{T}_k = \{\chi_k^{(1)}, \chi_k^{(2)}, \dots, \chi_k^{(N_k)}\}
 \]
 
 at each CPI index \(k\), where \(N_k\) is unknown and may change with time.
@@ -64,8 +64,10 @@ For target \(q\):
 - radial velocity:
 
 \[
-v_{r,q} = \mathbf{v}_q^T \hat{u}_q
+v_{r,q} = -\mathbf{v}_q^T \hat{u}_q
 \]
+
+with the repo sign convention that positive radial velocity means approaching the radar.
 
 - range to element \(m\):
 
@@ -88,7 +90,7 @@ R_{q,m} = \|\mathbf{p}_q - \mathbf{r}_m\|
 - Doppler phase:
 
 \[
-\phi_{D,q}(t) = \frac{4\pi v_{r,q} t}{\lambda}.
+\phi_{D,q}(t) = \frac{4\pi v_{r,q} t}{\lambda}
 \]
 
 After dechirp, FFT, and beamforming, the measured RD map is no longer a single isolated peak. It is a sum of target responses, sidelobes, leakage, noise, and clutter. The algorithm must therefore reason over sets of detections rather than a single global maximum.
@@ -115,11 +117,15 @@ R = -\frac{c f_b}{2\mu}
 f_D = -f_{FFT,shifted}, \qquad v_r = \frac{\lambda f_D}{2}
 \]
 
+where \(f_D\) is the repo-corrected Doppler frequency used throughout downstream detection, association, and tracking. The current code path already bakes this sign choice into the Doppler axis by negating the shifted FFT frequency.
+
 - keep explicit range-Doppler coupling correction
 
 \[
-R_{corr} = R_{raw} - \frac{c}{2\mu} f_D.
+R_{corr} = R_{raw} + s_{RD}\,\frac{c}{2\mu} f_D
 \]
+
+where `s_RD` is another repo-defined sign constant validated against simulator truth. The current tracker uses the existing sign convention from `docs/car_tracking_algorithm_reference.md`; future multi-car code should preserve that exact convention rather than hardcoding a minus sign independently.
 
 Those choices matter because downstream association and filtering will fail if range or Doppler signs are inconsistent between prediction and measurement.
 
@@ -134,17 +140,18 @@ X[d,r,m]
 \]
 
 after Doppler FFT for Doppler bin \(d\), range bin \(r\), and receive channel \(m\).
+Let \(N_{rx}\) denote the number of receive channels.
 
 Define noncoherent power
 
 \[
-P[d,r] = \frac{1}{M}\sum_{m=1}^{M} |X[d,r,m]|^2.
+P[d,r] = \frac{1}{N_{rx}}\sum_{m=1}^{N_{rx}} |X[d,r,m]|^2.
 \]
 
 The single-target tracker effectively chooses one maximizer of a prediction-biased score. A multi-target tracker instead forms a detection set
 
 \[
-\mathcal{D}_k = \{(d_i,r_i,p_i)\}_{i=1}^{M_k}
+\mathcal{D}_k = \{(d_i,r_i,p_i)\}_{i=1}^{N_{det,k}}
 \]
 
 where each element passes a threshold test such as
@@ -159,19 +166,21 @@ The threshold can be global in a simple implementation, but a local adaptive thr
 
 For this repo, a practical baseline is:
 
-1. apply zero-Doppler exclusion bins as already done
-2. compute the RD power map
-3. estimate a local noise floor around each cell under test
-4. threshold the cell against a desired false-alarm ratio
-5. keep only local peaks or clustered above-threshold regions
+1. form the noncoherent RD power map
+2. apply a 2D CA-CFAR detector
+3. use guard cells around the cell under test
+4. use training cells outside the guard region to estimate local noise
+5. exclude the zero-Doppler clutter band from both detection and noise estimation
+6. apply a minimum SNR threshold
+7. keep only local maxima before clustering
 
-Even if the first implementation uses a simple threshold, the doc should treat the detector output as a set of candidate cells, not one winner.
+This gives a concrete codeable baseline. If strong targets corrupt the CFAR training window, the detector can later be upgraded to OS-CFAR or another robust variant.
 
 ---
 
 ## 6) Clustering Detections Into Object Candidates
 
-One physical car generally occupies multiple adjacent RD bins because of finite resolution, window sidelobes, range migration, and imperfect bin alignment. Therefore the raw detection set
+One physical car can occupy multiple RD bins because of finite resolution, window sidelobes, range migration, imperfect bin alignment, and multiple scatterers on the vehicle body. In simple scenes this may look like one connected blob, but in general one car can produce several separated detections and two nearby cars can merge into one blob. Therefore the raw detection set
 
 \[
 \mathcal{D}_k
@@ -209,11 +218,21 @@ For each cluster \(C\), define either:
 \hat d = \frac{\sum_{(r,d)\in C} d\,P[d,r]}{\sum_{(r,d)\in C} P[d,r]}.
 \]
 
-The peak estimator is simpler and more stable in low SNR. The centroid estimator better captures extended blobs but is more sensitive to sidelobes and merged objects.
+The peak estimator is the recommended baseline. If sub-bin refinement is needed, use local interpolation around the peak cell before using a full blob centroid. A centroid over all thresholded cells can be biased by sidelobes or merged targets. If centroiding is used at all, it should preferably operate on thresholded power with the local noise floor removed, or on another compressed weighting, rather than on raw unbounded linear power from the full blob.
+
+If the centroid form is used, the document must explicitly map fractional bin coordinates into physical observables:
+
+\[
+\hat f_b = f_b(\hat r), \qquad \hat f_D = f_D(\hat d)
+\]
+
+\[
+\hat R = -\frac{c\hat f_b}{2\mu}, \qquad \hat v_r = \frac{\lambda \hat f_D}{2}
+\]
 
 ### 6.1 Why clustering matters
 
-This stage is what turns "many blips" into "one car candidate." A single vehicle may light up several adjacent bins in range and Doppler, so the tracker should associate and smooth one cluster-level measurement, not every threshold crossing independently.
+This stage is what turns "many blips" into measurement candidates. For a first implementation, treating one dominant cluster as one car candidate is acceptable, but it is only a simplifying assumption and should be documented as such.
 
 ---
 
@@ -221,17 +240,39 @@ This stage is what turns "many blips" into "one car candidate." A single vehicle
 
 After RD clustering, each object candidate should get its own AoA estimate. This is critical: angle estimation should be tied to a specific detection hypothesis, not run once globally for the scene.
 
-For cluster \(C^{(j)}\), choose a representative RD cell or a small coherent neighborhood and form the array snapshot
+For cluster \(C^{(j)}\), the safest baseline is to use the peak RD cell and form the array snapshot
 
 \[
-\mathbf{x}^{(j)} \in \mathbb{C}^{M}.
+\mathbf{x}^{(j)} = X[\hat d,\hat r,:] \in \mathbb{C}^{N_{rx}}.
 \]
 
 For hypothesized direction \(\hat{u}(\mathrm{az},\mathrm{el})\), the steering vector is
 
 \[
-a_m(\hat{u}) = e^{-j\frac{2\pi}{\lambda}\hat{u}^T \mathbf{r}_m}.
+a_m(\hat{u}) = e^{-j\psi_m(\hat{u})}.
 \]
+
+The phase term \(\psi_m\) must match the phase convention already present in the RD snapshot `X[d,r,m]`. The correct element-dependent phase depends on the simulated TX/RX geometry.
+
+If the simulator uses one common transmitter and multiple receive elements, the element-dependent phase is one-way:
+
+\[
+\Delta\phi_m \approx -\frac{2\pi}{\lambda}\hat u^T \mathbf{r}_m.
+\]
+
+If each array element is modeled as a colocated monostatic TX/RX element, the element-dependent phase is two-way:
+
+\[
+\Delta\phi_m \approx -\frac{4\pi}{\lambda}\hat u^T \mathbf{r}_m.
+\]
+
+For this repo, the current single-target implementation precomputes `steering_conj_` with
+
+\[
+\psi_m(\hat{u}) = \frac{2\pi}{\lambda}\hat{u}^T \mathbf{r}_m
+\]
+
+and scores directions with \(\mathbf{a}(\hat{u})^H\mathbf{x}\). Multi-car code should reuse that exact convention unless the front-end snapshot phasing is intentionally changed and revalidated. The important requirement is consistency, because a sign or factor mismatch can produce mirrored or biased AoA estimates.
 
 Stacking over all elements gives \(\mathbf{a}(\hat{u})\), and the beamformer score is
 
@@ -255,6 +296,8 @@ Equivalent angular outputs may be written as azimuth and elevation
 
 - AoA cost scales with the number of detection clusters, not just with one selected RD bin.
 - A coarse-to-fine angular search like the current implementation remains useful.
+- Do not coherently sum neighboring RD cells unless their phase is explicitly aligned first.
+- A safer multi-cell extension is to sum per-cell beamformer powers noncoherently rather than summing raw snapshots coherently.
 - If two cars overlap in the same RD cell, simple beamforming can merge them; the document should acknowledge this as a failure mode.
 
 ---
@@ -285,6 +328,8 @@ v_{r,k}^{(j)} \\
 \end{bmatrix}.
 \]
 
+Here \(R_k^{(j)}\) should denote the range after the repo-consistent range-Doppler coupling correction, not the raw peak-bin range. In other words, downstream association should use \(R_{corr}\), not \(R_{raw}\).
+
 Associated metadata should include:
 
 - peak or integrated power
@@ -295,14 +340,14 @@ Associated metadata should include:
 The full measurement set for CPI \(k\) is then
 
 \[
-\mathcal{Z}_k = \{z_k^{(1)}, z_k^{(2)}, \dots, z_k^{(M_k)}\}.
+\mathcal{Z}_k = \{z_k^{(1)}, z_k^{(2)}, \dots, z_k^{(N_{meas,k})}\}.
 \]
 
 ---
 
 ## 9) Track State Model
 
-Each live car track should maintain a Cartesian kinematic state such as
+Each live car track should maintain a Cartesian kinematic state. The most general form is
 
 \[
 \mathbf{x}_k =
@@ -341,7 +386,17 @@ Expanded component-wise, the prediction step is simply
 
 This is intentionally lightweight: it says "move the track forward using its last known velocity" and handles uncertainty with fixed gates, fixed smoothing gains, and lifecycle logic rather than with a propagated covariance matrix.
 
-### 9.1 Why Cartesian state is preferable
+### 9.1 Recommended state dimension for cars
+
+For road vehicles, a fully unconstrained 6D state is often noisier than necessary. Prefer one of these, in order of practicality:
+
+- known road plane: track \([x,y,v_x,v_y]^T\) and derive or fix \(z\)
+- mostly fixed height: track \([x,y,z,v_x,v_y]^T\) with \(v_z = 0\)
+- full free-space motion: use \([x,y,z,v_x,v_y,v_z]^T\) only if the simulator truly needs it
+
+The rest of this document keeps the 6D notation for generality, but an automotive multi-car baseline should strongly consider a ground-plane-constrained state.
+
+### 9.2 Why Cartesian state is preferable
 
 The current single-car tracker stores direction and radial speed, then projects the result back to Cartesian coordinates. That is insufficient for multi-car tracking because:
 
@@ -387,11 +442,7 @@ p_z
 \]
 
 \[
-v_r(\mathbf{x}) =
-\begin{bmatrix}
-v_x & v_y & v_z
-\end{bmatrix}
-\hat{u}(\mathbf{x}),
+v_r(\mathbf{x}) = -\mathbf{v}^T\hat{u}(\mathbf{x}),
 \qquad
 f_D(\mathbf{x}) = \frac{2}{\lambda} v_r(\mathbf{x}),
 \]
@@ -402,7 +453,7 @@ f_D(\mathbf{x}) = \frac{2}{\lambda} v_r(\mathbf{x}),
 \phi(\mathbf{x}) = \operatorname{atan2}(p_z,\sqrt{p_x^2+p_y^2}).
 \]
 
-This map is still useful even without an EKF. The tracker uses it to predict where a track should appear in range, Doppler, and angle space before comparing it to new cluster measurements.
+This nonlinear map \(h(\mathbf{x})\) is the same kind of measurement function an EKF would use. The difference in this design is not the prediction model; it is the update model. The tracker still predicts into radar measurement space for gating and association, but it uses fixed-gain smoothing instead of covariance-derived Kalman gains.
 
 ---
 
@@ -411,7 +462,7 @@ This map is still useful even without an EKF. The tracker uses it to predict whe
 Let the predicted track set at CPI \(k\) be
 
 \[
-\widehat{\mathcal{T}}_{k|k-1} = \{\hat{\mathbf{x}}_{k|k-1}^{(i)}\}_{i=1}^{N_{trk}}.
+\widehat{\mathcal{T}}_{k|k-1} = \{\hat{\mathbf{x}}_{k|k-1}^{(i)}\}_{i=1}^{N_{trk,k}}.
 \]
 
 For track \(i\), first map its predicted Cartesian state into the measurement domain:
@@ -430,17 +481,19 @@ For measurement \(j\), define residual components such as
 
 along with wrapped angle residuals \(\Delta \theta_{ij}\) and \(\Delta \phi_{ij}\).
 
-Without an EKF, the default gating statistic should be geometric rather than covariance-based. A practical weighted distance is
+Without an EKF, the default gating statistic should still be normalized by expected measurement error. A practical choice is
 
 \[
-d_{ij}^2 =
-w_R\,(\Delta R_{ij})^2
-+ w_v\,(\Delta v_{r,ij})^2
-+ w_\theta\,(\operatorname{wrap}(\Delta \theta_{ij}))^2
-+ w_\phi\,(\operatorname{wrap}(\Delta \phi_{ij}))^2.
+D_{ij}^2 =
+\left(\frac{\Delta R_{ij}}{\sigma_R}\right)^2
++ \left(\frac{\Delta v_{r,ij}}{\sigma_v}\right)^2
++ \left(\frac{\operatorname{wrap}(\Delta \theta_{ij})}{\sigma_\theta}\right)^2
++ \left(\frac{\operatorname{wrap}(\Delta \phi_{ij})}{\sigma_\phi}\right)^2.
 \]
 
-In many road scenes, association can be simplified further by converting the measurement into Cartesian position and computing a position-based distance to the predicted track.
+This makes the gate interpretable: \(D_{ij}^2 < G^2\) behaves like a rough multi-dimensional sigma gate.
+
+In many road scenes, association can be simplified further by converting the measurement into Cartesian position and computing a position-based distance to the predicted track, but this should still respect the much weaker angular observability relative to range and radial velocity.
 
 Accept the pair as feasible only if it falls inside fixed gates such as:
 
@@ -454,26 +507,41 @@ Accept the pair as feasible only if it falls inside fixed gates such as:
 For sparse scenes, nearest-neighbor assignment is often enough:
 
 \[
-j^*(i) = \arg\min_j d_{ij}.
+j^*(i) = \arg\min_j D_{ij}.
 \]
 
 For multiple nearby cars, a global one-to-one assignment is better. Define a cost matrix
 
 \[
-C_{ij} = d_{ij}
+C_{ij} = D_{ij}
 \]
 
-for gated pairs and a large penalty for infeasible pairs, then solve the minimum-cost bipartite assignment.
+for gated pairs and mark ungated pairs as infeasible. Then solve a one-to-one assignment only over feasible pairs and explicitly handle:
+
+- matched track-measurement pairs
+- unmatched tracks that coast
+- unmatched measurements that may spawn tentative tracks
+- any assignment whose cost exceeds the gate threshold, which must be rejected rather than accepted via a large finite dummy cost
+
+The cost matrix may be rectangular because the number of tracks and measurements usually differs. If the selected assignment solver requires a square matrix, pad with dummy rows or columns, but dummy assignments are bookkeeping only and must never be interpreted as physical matches.
 
 This is the right default for a first multi-car implementation in this repo: it is much more stable than greedy matching but far simpler than JPDA or MHT.
 
 ### 11.2 Why this works without an EKF
 
-Classical radar trackers often do not need dynamic covariance propagation to work well. If the CPI rate is high enough and the scene is mostly cars moving with moderate acceleration, fixed gates plus nearest-neighbor or Hungarian assignment are usually enough to connect detections reliably.
+For controlled simulations and sparse scenes, fixed gates plus nearest-neighbor or Hungarian assignment can work well enough as a baseline. Covariance-based filters become more important when uncertainty changes strongly with range, angle, SNR, clutter level, or target geometry.
 
 ### 11.3 Angular wrapping and sign consistency
 
 Association logic must normalize angle residuals into consistent wrapped intervals, and it must use the same range and Doppler sign conventions as the FFT front end. Small sign mismatches can silently destroy track continuity.
+
+For azimuth and elevation residuals, a safe default is
+
+\[
+\operatorname{wrap}(\alpha) = \operatorname{atan2}(\sin\alpha, \cos\alpha)
+\]
+
+so residuals land in \([ -\pi, \pi ]\) without `fmod` edge-case surprises.
 
 ---
 
@@ -481,7 +549,9 @@ Association logic must normalize angle residuals into consistent wrapped interva
 
 Once a measurement \(z_k^{(j)}\) is assigned to track \(i\), the tracker should update position and velocity with fixed gains rather than a Kalman gain.
 
-For a Cartesian position measurement \(\mathbf{p}_{meas}^{(j)}\) and predicted state
+Direct Cartesian conversion is convenient but angle noise can create large cross-range errors at long range. Therefore the update should use scalar range residual for the LOS correction and use AoA primarily for cross-range correction.
+
+For measured range \(R_{meas}^{(j)}\), Cartesian position proxy \(\mathbf{p}_{meas}^{(j)}\), measured LOS unit vector \(\hat u_{meas}^{(j)}\), measured radial velocity \(v_{r,meas}^{(j)}\), and predicted state
 
 \[
 \hat{\mathbf{p}}^- = \hat{\mathbf{p}}_{k|k-1}^{(i)},
@@ -489,30 +559,56 @@ For a Cartesian position measurement \(\mathbf{p}_{meas}^{(j)}\) and predicted s
 \hat{\mathbf{v}}^- = \hat{\mathbf{v}}_{k|k-1}^{(i)},
 \]
 
-define residual
+first compute the predicted range and LOS direction
 
 \[
-\mathbf{r}_k = \mathbf{p}_{meas}^{(j)} - \hat{\mathbf{p}}^-.
+R_{pred} = \|\hat{\mathbf{p}}^-\|,
+\qquad
+\hat u_{pred} = \frac{\hat{\mathbf{p}}^-}{\|\hat{\mathbf{p}}^-\|}.
 \]
 
-Then the alpha-beta update is
+Then form the LOS residual from range alone:
 
 \[
-\hat{\mathbf{p}}^+ = \hat{\mathbf{p}}^- + \alpha\,\mathbf{r}_k
+e_R = R_{meas}^{(j)} - R_{pred},
+\qquad
+\mathbf{r}_{LOS} = e_R\,\hat u_{pred}.
+\]
+
+Use AoA only to construct the cross-range correction:
+
+\[
+\mathbf{r}_{cart} = \mathbf{p}_{meas}^{(j)} - \hat{\mathbf{p}}^-,
+\qquad
+\mathbf{r}_{cross} = \mathbf{r}_{cart} - (\mathbf{r}_{cart}^T \hat u_{pred})\hat u_{pred}.
+\]
+
+Then use anisotropic fixed gains
+
+\[
+\hat{\mathbf{p}}^+ = \hat{\mathbf{p}}^- + \alpha_R\,\mathbf{r}_{LOS} + \alpha_A\,\mathbf{r}_{cross}
 \]
 
 \[
-\hat{\mathbf{v}}^+ = \hat{\mathbf{v}}^- + \frac{\beta}{\Delta t}\,\mathbf{r}_k.
+v_{r,pred} = -(\hat{\mathbf{v}}^-)^T\hat u_{meas}^{(j)}
 \]
 
-Here \(\alpha\) controls how strongly the track snaps toward the new measurement, while \(\beta\) controls how aggressively velocity is corrected.
+\[
+e_{v_r} = v_{r,meas}^{(j)} - v_{r,pred}
+\]
+
+\[
+\hat{\mathbf{v}}^+ = \hat{\mathbf{v}}^- - \gamma_v\,e_{v_r}\,\hat u_{meas}^{(j)} + \frac{\beta_A}{\Delta t}\,\mathbf{r}_{cross}.
+\]
+
+Here \(\alpha_R\) and \(\gamma_v\) should usually be stronger than \(\alpha_A\) and \(\beta_A\), because radar observes range and radial velocity much more reliably than cross-range motion from AoA.
 
 Typical interpretation:
 
-- high \(\alpha\): fast response, less smoothing
-- low \(\alpha\): more stable tracks, more lag
-- high \(\beta\): velocity adapts quickly
-- low \(\beta\): velocity stays conservative
+- high \(\alpha_R\): fast range-driven LOS position response
+- low \(\alpha_A\): suppress cross-range jitter from noisy angle
+- high \(\gamma_v\): trust measured radial velocity strongly
+- low \(\beta_A\): keep tangential velocity conservative unless repeated geometry supports it
 
 If no measurement is assigned, the track should coast:
 
@@ -532,7 +628,9 @@ Multi-target tracking is not only state estimation; it is also hypothesis manage
 
 ### 13.1 Birth
 
-Any measurement not assigned to an existing track may initialize a tentative track. Its initial state can be formed from range and angles:
+Any measurement not assigned to an existing track may initialize a tentative track, but only if it is not inside a birth-suppression gate around an existing confirmed track. This helps avoid duplicate births from sidelobes or split clusters.
+
+Its initial state can be formed from range and angles:
 
 \[
 \hat{\mathbf{p}}_0 = R
@@ -546,7 +644,7 @@ Any measurement not assigned to an existing track may initialize a tentative tra
 and from radial velocity projected along LOS:
 
 \[
-\hat{\mathbf{v}}_0 = v_r
+\hat{\mathbf{v}}_0 = -v_r
 \begin{bmatrix}
 \cos\phi\cos\theta \\
 \cos\phi\sin\theta \\
@@ -554,11 +652,11 @@ and from radial velocity projected along LOS:
 \end{bmatrix}.
 \]
 
-This is only a partial velocity initialization, but it is acceptable for a lightweight tracker. The tangential velocity components can start from zero or LOS-projected speed and converge over subsequent alpha-beta updates.
+This initializes only the LOS velocity component. Tangential velocity is weakly observed from a single CPI and should start conservatively, then be inferred gradually from repeated geometry, or be constrained by a road-plane or motion prior.
 
 ### 13.2 Confirmation
 
-A tentative track becomes confirmed after repeated support, for example if it receives at least \(m\) assignments within \(n\) consecutive CPIs.
+A tentative track becomes confirmed after repeated support, for example if it receives at least \(m\) assignments within \(n\) consecutive CPIs. Rules such as 2-of-3 or 3-of-5 are useful practical baselines.
 
 ### 13.3 Deletion
 
@@ -588,7 +686,11 @@ With a limited array aperture, the AoA surface may be broad or ambiguous. Then t
 
 ### 14.5 Sidelobe births
 
-Strong targets can create sidelobe detections that look like weak new cars. Confirmation logic and cluster-shape heuristics are useful defenses.
+Strong targets can create sidelobe detections that look like weak new cars. Confirmation logic, birth suppression near existing tracks, and cluster-shape or power heuristics are useful defenses.
+
+### 14.6 Multiple scatterers on one car
+
+A vehicle can produce several scattering centers with different RD signatures or even different AoA peaks. A first implementation may still collapse this into one dominant cluster per car, but that simplification should be treated as a modeling limit rather than a universal truth.
 
 ---
 
@@ -601,7 +703,7 @@ To evolve the current codebase toward this design, the main structural changes a
 3. Replace one `BatchResult` stream with either:
    - one per-track history, or
    - one scene-level batch object containing all detections and all track states for that CPI.
-4. Keep the current FFT, windowing, steering-vector, and sign-convention code paths as shared front-end machinery.
+4. Keep the current FFT, windowing, steering-vector, and sign-convention code paths as shared front-end machinery, and expose the Doppler and range-Doppler sign choices as explicit constants or helpers rather than duplicating sign assumptions.
 5. Insert explicit stages for detection, cluster formation, per-cluster AoA, association, and track management.
 6. Keep the tracking back end lightweight: constant-velocity prediction, fixed gates, assignment, alpha-beta update, and lifecycle counters.
 
@@ -621,7 +723,7 @@ The existing `BatchResult` type is too single-target-specific to serve as the ma
 If \(J_k\) candidates survive clustering and the angle grid has \(N_{az}N_{el}\) points, naive AoA cost scales roughly as
 
 \[
-\mathcal{O}(J_k M N_{az} N_{el}).
+\mathcal{O}(J_k N_{rx} N_{az} N_{el}).
 \]
 
 That makes early pruning, coarse-to-fine angle search, and reasonable detector thresholds important implementation choices.
@@ -652,13 +754,13 @@ A practical baseline consistent with this document is:
 2. Form an RD power map for each CPI.
 3. Detect significant cells with CFAR or another local thresholding method.
 4. Group neighboring detections into RD clusters.
-5. Extract one range-Doppler hypothesis per cluster, preferably by centroid or peak selection.
-6. Estimate AoA separately for each cluster.
+5. Extract one range-Doppler hypothesis per cluster, preferably from the peak cell with optional local interpolation.
+6. Estimate AoA separately for each cluster using a snapshot convention consistent with the current repo steering vector.
 7. Convert each cluster into one measurement candidate.
 8. Predict all live tracks forward with a Cartesian constant-velocity model.
-9. Gate and assign measurements to tracks with Euclidean or weighted geometric distance and a one-to-one assignment method.
-10. Update matched tracks with an alpha-beta filter.
-11. Coast unmatched tracks, spawn tentative tracks from unmatched measurements, and confirm or delete tracks based on hit and miss counts.
+9. Gate and assign measurements to tracks with normalized measurement-space distance and a one-to-one assignment method that explicitly supports unmatched tracks and unmatched measurements.
+10. Update matched tracks with anisotropic fixed-gain smoothing that uses measured radial velocity directly.
+11. Coast unmatched tracks, spawn tentative tracks only outside birth-suppression gates, and confirm or delete tracks based on hit and miss counts.
 
 This baseline is intentionally mechanical: detect, cluster, connect the dots, smooth, and manage track life. It avoids the matrix-heavy EKF while still matching how many practical multi-target radar trackers are built.
 
@@ -667,19 +769,19 @@ This baseline is intentionally mechanical: detect, cluster, connect the dots, sm
 ## 18) Quick Formula Sheet
 
 \[
-R = -\frac{c f_b}{2\mu}, \qquad v_r = \frac{\lambda f_D}{2}, \qquad R_{corr} = R_{raw} - \frac{c}{2\mu} f_D
+f_D = -f_{FFT,shifted}, \qquad R = -\frac{c f_b}{2\mu}, \qquad v_r = \frac{\lambda f_D}{2}, \qquad f_D(\mathbf{x}) = \frac{2v_r(\mathbf{x})}{\lambda}, \qquad R_{corr} = R_{raw} + s_{RD}\frac{c}{2\mu} f_D
 \]
 
 \[
-P[d,r] = \frac{1}{M}\sum_{m=1}^{M}|X[d,r,m]|^2
+P[d,r] = \frac{1}{N_{rx}}\sum_{m=1}^{N_{rx}}|X[d,r,m]|^2
 \]
 
 \[
-d_{ij}^2 =
-w_R\,(\Delta R_{ij})^2
-+ w_v\,(\Delta v_{r,ij})^2
-+ w_\theta\,(\operatorname{wrap}(\Delta \theta_{ij}))^2
-+ w_\phi\,(\operatorname{wrap}(\Delta \phi_{ij}))^2
+D_{ij}^2 =
+\left(\frac{\Delta R_{ij}}{\sigma_R}\right)^2
++ \left(\frac{\Delta v_{r,ij}}{\sigma_v}\right)^2
++ \left(\frac{\operatorname{wrap}(\Delta \theta_{ij})}{\sigma_\theta}\right)^2
++ \left(\frac{\operatorname{wrap}(\Delta \phi_{ij})}{\sigma_\phi}\right)^2
 \]
 
 \[
@@ -691,11 +793,19 @@ w_R\,(\Delta R_{ij})^2
 \]
 
 \[
-\hat{\mathbf{p}}^+ = \hat{\mathbf{p}}^- + \alpha\,(\mathbf{p}_{meas}-\hat{\mathbf{p}}^-)
+\hat{\mathbf{p}}^+ = \hat{\mathbf{p}}^- + \alpha_R\,\mathbf{r}_{LOS} + \alpha_A\,\mathbf{r}_{cross}
 \]
 
 \[
-\hat{\mathbf{v}}^+ = \hat{\mathbf{v}}^- + \frac{\beta}{\Delta t}(\mathbf{p}_{meas}-\hat{\mathbf{p}}^-)
+v_{r,pred} = -(\hat{\mathbf{v}}^-)^T\hat u_{meas}
+\]
+
+\[
+e_{v_r} = v_{r,meas} - v_{r,pred}
+\]
+
+\[
+\hat{\mathbf{v}}^+ = \hat{\mathbf{v}}^- - \gamma_v\,e_{v_r}\,\hat u_{meas} + \frac{\beta_A}{\Delta t}\mathbf{r}_{cross}
 \]
 
 \[

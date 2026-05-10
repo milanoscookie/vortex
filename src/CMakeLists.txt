@@ -2,6 +2,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(vortex_core STATIC
   fmcw_tracker.cpp
+  fmcw_tracker_detection.cpp
+  fmcw_tracker_tracking.cpp
+  fmcw_tracker_summary.cpp
   radar_algo.cpp
   ${VORTEX_CORE_SOURCES}
 )

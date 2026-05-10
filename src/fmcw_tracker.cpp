@@ -15,10 +15,12 @@
 #include <vector>
 
 namespace fmcw_tracker {
-namespace {
+namespace detail {
 
 using Real = problem::Real;
 using Vec3 = problem::Vec3;
+
+constexpr Real kRangeDopplerCouplingSign = 1.0f;
 
 std::size_t computeChirpCount(const problem::ProblemDescription &description) {
     const Real chirp_duration_s = static_cast<Real>(problem::RadarSettings::kRadarBlockSize) /
@@ -109,29 +111,24 @@ std::vector<Vec3> elementPositions(const RadarConfig &cfg) {
     for (std::size_t ix = 0; ix < cfg.probe_num_x; ++ix) {
         for (std::size_t iy = 0; iy < cfg.probe_num_y; ++iy) {
             const std::size_t flat = ix * cfg.probe_num_y + iy;
+            // Match lib/probe.h exactly: ix -> X, iy -> Y, Z=0
             positions[flat].x() =
                 (static_cast<Real>(ix) - 0.5f * static_cast<Real>(cfg.probe_num_x - 1)) *
                 cfg.probe_dx_m;
             positions[flat].y() =
                 (static_cast<Real>(iy) - 0.5f * static_cast<Real>(cfg.probe_num_y - 1)) *
                 cfg.probe_dy_m;
+            positions[flat].z() = 0.0f;
         }
     }
     return positions;
 }
 
-struct SteeringGrid {
-    std::vector<Complex> steering_conj;
-    std::vector<Vec3> directions;
-    std::vector<Real> azimuth_deg;
-    std::vector<Real> elevation_deg;
-};
-
 SteeringGrid makeSteeringGrid(const RadarConfig &cfg, const DetectionConfig &det) {
     const std::vector<Vec3> positions_m = elementPositions(cfg);
-    const std::vector<Real> az_rad =
+    const std::vector<Real> az_deg_vec =
         linspace(det.azimuth_min_deg, det.azimuth_max_deg, det.azimuth_count);
-    const std::vector<Real> el_rad =
+    const std::vector<Real> el_deg_vec =
         linspace(det.elevation_min_deg, det.elevation_max_deg, det.elevation_count);
 
     SteeringGrid grid;
@@ -140,11 +137,12 @@ SteeringGrid makeSteeringGrid(const RadarConfig &cfg, const DetectionConfig &det
     grid.azimuth_deg.reserve(det.azimuth_count * det.elevation_count);
     grid.elevation_deg.reserve(det.azimuth_count * det.elevation_count);
 
-    for (Real az_deg : az_rad) {
+    for (Real az_deg : az_deg_vec) {
         const Real az = az_deg * problem::Constants::kPi / 180.0f;
-        for (Real el_deg : el_rad) {
+        for (Real el_deg : el_deg_vec) {
             const Real el = el_deg * problem::Constants::kPi / 180.0f;
             Vec3 direction;
+            // X-forward, Y-left, Z-up coordinate system
             direction.x() = std::cos(el) * std::cos(az);
             direction.y() = std::cos(el) * std::sin(az);
             direction.z() = std::sin(el);
@@ -172,6 +170,53 @@ std::vector<Complex> makeComplexWindow(const std::vector<Real> &real_window) {
     return window;
 }
 
+PeakInterpResult quadraticPeakOffsetChecked(Real ym1, Real y0, Real yp1) {
+    const Real denom = ym1 - 2.0f * y0 + yp1;
+    if (std::abs(denom) < 1.0e-12f) {
+        return {0.0f, false};
+    }
+    const Real delta = 0.5f * (ym1 - yp1) / denom;
+    return {delta, std::abs(delta) <= 1.0f};
+}
+
+Real interpolateAxis(const std::vector<Real> &axis, std::size_t bin, Real offset) {
+    if (axis.empty()) {
+        return 0.0f;
+    }
+    if (axis.size() == 1U) {
+        return axis[0];
+    }
+    const std::size_t n = axis.size();
+    if (bin == 0U) {
+        const Real step = axis[1] - axis[0];
+        return axis[0] + offset * step;
+    }
+    if (bin + 1U >= n) {
+        const Real step = axis[n - 1] - axis[n - 2];
+        return axis[n - 1] + offset * step;
+    }
+    if (offset >= 0.0f) {
+        const Real step = axis[bin + 1] - axis[bin];
+        return axis[bin] + offset * step;
+    }
+    const Real step = axis[bin] - axis[bin - 1];
+    return axis[bin] + offset * step;
+}
+
+std::vector<double> gradient(const std::vector<double> &y, const std::vector<double> &x) {
+    if (y.size() < 2U || y.size() != x.size()) {
+        return std::vector<double>(y.size(), 0.0);
+    }
+    const std::size_t n = y.size();
+    std::vector<double> dy_dx(n);
+    dy_dx[0] = (y[1] - y[0]) / std::max(1.0e-9, x[1] - x[0]);
+    for (std::size_t i = 1; i + 1 < n; ++i) {
+        dy_dx[i] = (y[i + 1] - y[i - 1]) / std::max(1.0e-9, x[i + 1] - x[i - 1]);
+    }
+    dy_dx[n - 1] = (y[n - 1] - y[n - 2]) / std::max(1.0e-9, x[n - 1] - x[n - 2]);
+    return dy_dx;
+}
+
 Real degrees(Real radians) {
     return radians * 180.0f / problem::Constants::kPi;
 }
@@ -181,14 +226,18 @@ Real azimuthDeg(const Vec3 &direction) {
 }
 
 Real elevationDeg(const Vec3 &direction) {
-    return degrees(std::atan2(direction.z(), std::hypot(direction.x(), direction.y())));
+    const Real r = direction.norm();
+    if (r < 1.0e-6f) {
+        return 0.0f;
+    }
+    return degrees(std::asin(std::clamp(direction.z() / r, -1.0f, 1.0f)));
 }
 
 Real wrapAngleDeg(Real angle_deg) {
     while (angle_deg > 180.0f) {
         angle_deg -= 360.0f;
     }
-    while (angle_deg < -180.0f) {
+    while (angle_deg <= -180.0f) {
         angle_deg += 360.0f;
     }
     return angle_deg;
@@ -200,20 +249,11 @@ Real angleDifferenceDeg(Real lhs_deg, Real rhs_deg) {
 
 Vec3 normalizedOr(const Vec3 &value, const Vec3 &fallback) {
     const Real norm = value.norm();
-    if (!std::isfinite(norm) || norm <= 1.0e-6f) {
+    if (norm < 1.0e-6f) {
         return fallback;
     }
     return value / norm;
 }
-
-struct KinematicEstimate {
-    Vec3 position_m = Vec3::Zero();
-    Vec3 velocity_mps = Vec3::Zero();
-    Vec3 direction = Vec3::UnitX();
-    Real range_m = 0.0f;
-    Real radial_velocity_mps = 0.0f;
-    Real doppler_hz = 0.0f;
-};
 
 KinematicEstimate makeKinematicEstimate(const RadarConfig &cfg,
                                         const Vec3 &position_m,
@@ -223,201 +263,80 @@ KinematicEstimate makeKinematicEstimate(const RadarConfig &cfg,
     estimate.position_m = position_m;
     estimate.velocity_mps = velocity_mps;
     estimate.range_m = position_m.norm();
-    estimate.direction = normalizedOr(position_m, normalizedOr(direction_fallback, Vec3::UnitX()));
+    estimate.direction = normalizedOr(position_m, direction_fallback);
     estimate.radial_velocity_mps = velocity_mps.dot(estimate.direction);
     estimate.doppler_hz = 2.0f * estimate.radial_velocity_mps / cfg.wavelengthM();
     return estimate;
 }
 
-Real associationPenalty(Real error, Real sigma) {
-    if (sigma <= 0.0f) {
-        return 0.0f;
-    }
-    const Real normalized_error = error / sigma;
-    return -0.5f * normalized_error * normalized_error;
-}
-
-struct PeakInterpResult {
-    Real delta = 0.0f;
-    bool valid = true;
-};
-
-PeakInterpResult quadraticPeakOffsetChecked(Real power_minus, Real power_center, Real power_plus) {
-    constexpr Real kLogEpsilon = 1.0e-12f;
-    const Real y_minus = std::log(power_minus + kLogEpsilon);
-    const Real y_center = std::log(power_center + kLogEpsilon);
-    const Real y_plus = std::log(power_plus + kLogEpsilon);
-    const Real denom = y_minus - 2.0f * y_center + y_plus;
-
-    PeakInterpResult out{};
-
-    if (!(denom < -1.0e-12f)) {
-        out.delta = 0.0f;
-        out.valid = false;
-        return out;
-    }
-
-    const Real raw_delta = 0.5f * (y_minus - y_plus) / denom;
-
-    if (!std::isfinite(raw_delta) || std::abs(raw_delta) >= 0.45f) {
-        out.delta = 0.0f;
-        out.valid = false;
-        return out;
-    }
-
-    out.delta = raw_delta;
-    out.valid = true;
-    return out;
-}
-
-Real interpolateAxis(const std::vector<Real> &axis, std::size_t bin, Real offset) {
-    if (axis.empty() || bin >= axis.size()) {
-        return 0.0f;
-    }
-    if (offset > 0.0f && bin + 1 < axis.size()) {
-        return axis[bin] + offset * (axis[bin + 1] - axis[bin]);
-    }
-    if (offset < 0.0f && bin > 0) {
-        return axis[bin] + offset * (axis[bin] - axis[bin - 1]);
-    }
-    return axis[bin];
-}
-
 std::size_t nearestAxisBin(const std::vector<Real> &axis, Real value) {
     if (axis.empty()) {
-        return 0;
+        return 0U;
     }
-
-    std::size_t best_bin = 0;
-    Real best_error = std::abs(axis[0] - value);
-    for (std::size_t i = 1; i < axis.size(); ++i) {
-        const Real error = std::abs(axis[i] - value);
-        if (error < best_error) {
-            best_error = error;
-            best_bin = i;
-        }
+    auto it = std::lower_bound(axis.begin(), axis.end(), value);
+    if (it == axis.begin()) {
+        return 0U;
     }
-    return best_bin;
+    if (it == axis.end()) {
+        return axis.size() - 1U;
+    }
+    const std::size_t idx = static_cast<std::size_t>(std::distance(axis.begin(), it));
+    if (std::abs(*it - value) < std::abs(*(it - 1) - value)) {
+        return idx;
+    }
+    return idx - 1U;
 }
 
 std::vector<double> unwrapPhases(const std::vector<double> &phases) {
     if (phases.empty()) {
         return {};
     }
-
-    std::vector<double> unwrapped(phases.size(), 0.0f);
+    std::vector<double> unwrapped(phases.size());
+    double cumulative_jump = 0.0;
     unwrapped[0] = phases[0];
-    double offset = 0.0f;
     for (std::size_t i = 1; i < phases.size(); ++i) {
-        const double delta = phases[i] - phases[i - 1];
-        if (delta > problem::Constants::kPi) {
-            offset -= 2.0f * problem::Constants::kPi;
-        } else if (delta < -problem::Constants::kPi) {
-            offset += 2.0f * problem::Constants::kPi;
+        double diff = phases[i] - phases[i - 1];
+        if (diff > problem::Constants::kPi) {
+            cumulative_jump -= 2.0 * problem::Constants::kPi;
+        } else if (diff < -problem::Constants::kPi) {
+            cumulative_jump += 2.0 * problem::Constants::kPi;
         }
-        unwrapped[i] = phases[i] + offset;
+        unwrapped[i] = phases[i] + cumulative_jump;
     }
     return unwrapped;
 }
 
-std::vector<double> convolveSame(const std::vector<double> &signal,
-                                 const std::vector<double> &kernel) {
-    if (signal.empty() || kernel.empty()) {
-        return {};
-    }
-
-    std::vector<double> full(signal.size() + kernel.size() - 1, 0.0f);
-    for (std::size_t i = 0; i < signal.size(); ++i) {
-        for (std::size_t k = 0; k < kernel.size(); ++k) {
-            full[i + k] += signal[i] * kernel[k];
-        }
-    }
-
-    const std::size_t start = (kernel.size() - 1) / 2;
-    return std::vector<double>(full.begin() + static_cast<std::ptrdiff_t>(start),
-                               full.begin() + static_cast<std::ptrdiff_t>(start + signal.size()));
-}
-
 std::vector<double> movingAverageSame(const std::vector<double> &signal, std::size_t window_size) {
-    if (signal.empty()) {
-        return {};
+    if (window_size <= 1U || signal.empty()) {
+        return signal;
     }
-
-    window_size = std::max<std::size_t>(1U, window_size);
-    std::vector<double> prefix_sum(signal.size() + 1U, 0.0f);
-    for (std::size_t i = 0; i < signal.size(); ++i) {
-        prefix_sum[i + 1U] = prefix_sum[i] + signal[i];
+    const std::size_t n = signal.size();
+    std::vector<double> result(n);
+    double sum = 0.0;
+    const std::size_t half = window_size / 2U;
+    for (std::size_t i = 0; i < n; ++i) {
+        sum = 0.0;
+        std::size_t count = 0U;
+        const std::size_t start = (i > half) ? i - half : 0U;
+        const std::size_t end = std::min(n, i + half + 1U);
+        for (std::size_t j = start; j < end; ++j) {
+            sum += signal[j];
+            ++count;
+        }
+        result[i] = sum / static_cast<double>(count);
     }
-
-    std::vector<double> averaged(signal.size(), 0.0f);
-    const std::size_t half_window = window_size / 2U;
-    for (std::size_t i = 0; i < signal.size(); ++i) {
-        const std::size_t begin = (i > half_window) ? (i - half_window) : 0U;
-        const std::size_t end = std::min(signal.size(), i + half_window + 1U);
-        const double sum = prefix_sum[end] - prefix_sum[begin];
-        averaged[i] = sum / static_cast<double>(end - begin);
-    }
-    return averaged;
+    return result;
 }
 
-std::vector<double> gradient(const std::vector<double> &values,
-                             const std::vector<double> &times_s) {
-    const std::size_t count = values.size();
-    std::vector<double> grad(count, 0.0f);
-    if (count < 2) {
-        return grad;
-    }
+struct Candidate {
+    double frequency_hz;
+    double power;
+};
 
-    const double first_dt = times_s[1] - times_s[0];
-    const double last_dt = times_s[count - 1] - times_s[count - 2];
-    grad[0] = (values[1] - values[0]) / first_dt;
-    grad[count - 1] = (values[count - 1] - values[count - 2]) / last_dt;
-
-    for (std::size_t i = 1; i + 1 < count; ++i) {
-        const double dt = times_s[i + 1] - times_s[i - 1];
-        grad[i] = (values[i + 1] - values[i - 1]) / dt;
-    }
-
-    return grad;
-}
-
-std::vector<double> detrendPhase(const std::vector<double> &times_s,
-                                 const std::vector<double> &phase_rad) {
-    if (times_s.size() != phase_rad.size() || phase_rad.empty()) {
-        return {};
-    }
-    if (phase_rad.size() == 1U) {
-        return std::vector<double>(1U, 0.0f);
-    }
-
-    double sum_t = 0.0f;
-    double sum_p = 0.0f;
-    double sum_tt = 0.0f;
-    double sum_tp = 0.0f;
-    for (std::size_t i = 0; i < phase_rad.size(); ++i) {
-        const double t = times_s[i];
-        const double p = phase_rad[i];
-        sum_t += t;
-        sum_p += p;
-        sum_tt += t * t;
-        sum_tp += t * p;
-    }
-
-    const double count = static_cast<double>(phase_rad.size());
-    const double denom = count * sum_tt - sum_t * sum_t;
-    double slope = 0.0f;
-    double intercept = phase_rad.front();
-    if (std::abs(denom) > 1.0e-9f) {
-        slope = (count * sum_tp - sum_t * sum_p) / denom;
-        intercept = (sum_p - slope * sum_t) / count;
-    }
-
-    std::vector<double> residual(phase_rad.size(), 0.0f);
-    for (std::size_t i = 0; i < phase_rad.size(); ++i) {
-        residual[i] = phase_rad[i] - (intercept + slope * times_s[i]);
-    }
-    return residual;
-}
+struct SegmentBounds {
+    std::size_t begin;
+    std::size_t end;
+};
 
 double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &batch_results,
                                               double chirp_duration_s,
@@ -426,46 +345,29 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
                                               std::vector<double> *residual_phase_out = nullptr) {
     constexpr double kMinSearchFrequencyHz = 10.0f;
     constexpr double kMaxSearchFrequencyHz = 100.0f;
-    constexpr double kHighPassCutoffHz = 15.0f;
     constexpr std::size_t kBoundaryFitSamples = 8U;
 
     if (chirp_duration_s <= 0.0f) {
         return 0.0f;
     }
 
-    std::size_t chirps_per_cpi = 0U;
-    for (const BatchResult &batch : batch_results) {
-        if (!batch.slow_time_phase_rad.empty()) {
-            chirps_per_cpi = batch.slow_time_phase_rad.size();
-            break;
-        }
-    }
+    std::vector<double> times_s;
+    std::vector<double> wrapped_phase_rad;
+    const std::size_t chirps_per_cpi =
+        batch_results.empty() ? 0U : batch_results.front().slow_time_phase_rad.size();
     if (chirps_per_cpi == 0U) {
         return 0.0f;
     }
-    const Real chirp_rate_hz = 1.0f / chirp_duration_s;
-    const std::size_t high_pass_window = std::max<std::size_t>(
-        3U, static_cast<std::size_t>(std::llround(chirp_rate_hz / kHighPassCutoffHz)));
 
-    struct SegmentBounds {
-        std::size_t begin = 0U;
-        std::size_t end = 0U;
-    };
-
-    std::vector<double> times_s;
-    std::vector<double> wrapped_phase_rad;
     std::vector<SegmentBounds> continuous_segments;
     std::vector<SegmentBounds> batch_segments;
-    times_s.reserve(batch_results.size() * chirps_per_cpi);
-    wrapped_phase_rad.reserve(batch_results.size() * chirps_per_cpi);
-
     long long next_expected_chirp = -1;
-    std::size_t valid_batch_count = 0U;
+
+    std::size_t valid_batch_count = 0;
     for (const BatchResult &batch : batch_results) {
-        if (!batch.valid) {
-            continue;
+        if (batch.valid) {
+            ++valid_batch_count;
         }
-        ++valid_batch_count;
     }
 
     if (valid_batch_count == 0U) {
@@ -566,92 +468,57 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
     std::vector<std::complex<double>> fft_output;
     std::vector<std::complex<double>> fft_input(nfft, std::complex<double>(0.0, 0.0));
 
-    std::size_t batch_segment_index = 0U;
-    for (const SegmentBounds &continuous_segment : continuous_segments) {
-        const std::size_t segment_length = continuous_segment.end - continuous_segment.begin;
-        if (segment_length < 4U) {
-            while (batch_segment_index < batch_segments.size() &&
-                   batch_segments[batch_segment_index].end <= continuous_segment.end) {
-                ++batch_segment_index;
+    for (const SegmentBounds &segment : continuous_segments) {
+        const std::size_t length = segment.end - segment.begin;
+        std::vector<double> segment_wrapped(wrapped_phase_rad.begin() + segment.begin,
+                                            wrapped_phase_rad.begin() + segment.end);
+        std::vector<double> segment_unwrapped(length);
+        double cumulative_jump = 0.0;
+        segment_unwrapped[0] = segment_wrapped[0];
+        for (std::size_t i = 1; i < length; ++i) {
+            double diff = segment_wrapped[i] - segment_wrapped[i - 1];
+            if (diff > problem::Constants::kPi) {
+                cumulative_jump -= 2.0 * problem::Constants::kPi;
+            } else if (diff < -problem::Constants::kPi) {
+                cumulative_jump += 2.0 * problem::Constants::kPi;
             }
-            continue;
+            segment_unwrapped[i] = segment_wrapped[i] + cumulative_jump;
         }
 
-        std::vector<double> aligned_unwrapped_segment;
-        aligned_unwrapped_segment.reserve(segment_length);
-
-        while (batch_segment_index < batch_segments.size() &&
-               batch_segments[batch_segment_index].begin < continuous_segment.end) {
-            const SegmentBounds batch_segment = batch_segments[batch_segment_index++];
-            if (batch_segment.end <= continuous_segment.begin) {
-                continue;
+        std::vector<double> segment_filtered = segment_unwrapped;
+        if (length > kBoundaryFitSamples * 2U) {
+            double sum_x = 0.0, sum_y = 0.0, sum_xx = 0.0, sum_xy = 0.0;
+            for (std::size_t i = 0; i < length; ++i) {
+                const double t = times_s[segment.begin + i] - times_s[segment.begin];
+                sum_x += t;
+                sum_y += segment_unwrapped[i];
+                sum_xx += t * t;
+                sum_xy += t * segment_unwrapped[i];
             }
-
-            const std::vector<double> wrapped_batch_segment(
-                wrapped_phase_rad.begin() + static_cast<std::ptrdiff_t>(batch_segment.begin),
-                wrapped_phase_rad.begin() + static_cast<std::ptrdiff_t>(batch_segment.end));
-            std::vector<double> unwrapped_batch_segment = unwrapPhases(wrapped_batch_segment);
-            if (unwrapped_batch_segment.empty()) {
-                continue;
+            const double det = static_cast<double>(length) * sum_xx - sum_x * sum_x;
+            const double slope = (static_cast<double>(length) * sum_xy - sum_x * sum_y) / det;
+            const double intercept = (sum_y - slope * sum_x) / static_cast<double>(length);
+            for (std::size_t i = 0; i < length; ++i) {
+                const double t = times_s[segment.begin + i] - times_s[segment.begin];
+                segment_filtered[i] -= (intercept + slope * t);
             }
-
-            if (!aligned_unwrapped_segment.empty()) {
-                const std::size_t prev_count =
-                    std::min<std::size_t>(kBoundaryFitSamples, aligned_unwrapped_segment.size());
-                double predicted_next_phase = aligned_unwrapped_segment.back();
-                if (aligned_unwrapped_segment.size() >= 2U) {
-                    double step_sum = 0.0f;
-                    std::size_t step_count = 0U;
-                    const std::size_t start = aligned_unwrapped_segment.size() - prev_count;
-                    for (std::size_t i = start + 1U; i < aligned_unwrapped_segment.size(); ++i) {
-                        step_sum +=
-                            aligned_unwrapped_segment[i] - aligned_unwrapped_segment[i - 1U];
-                        ++step_count;
-                    }
-                    if (step_count > 0U) {
-                        predicted_next_phase += step_sum / static_cast<double>(step_count);
-                    }
-                }
-
-                const double phase_offset = predicted_next_phase - unwrapped_batch_segment.front();
-                for (double &sample : unwrapped_batch_segment) {
-                    sample += phase_offset;
-                }
-            }
-
-            aligned_unwrapped_segment.insert(aligned_unwrapped_segment.end(),
-                                             unwrapped_batch_segment.begin(),
-                                             unwrapped_batch_segment.end());
-        }
-
-        if (aligned_unwrapped_segment.size() != segment_length) {
-            continue;
-        }
-
-        const std::vector<double> low_pass_segment =
-            movingAverageSame(aligned_unwrapped_segment,
-                              std::min(high_pass_window, aligned_unwrapped_segment.size()));
-
-        std::vector<double> filtered_segment(aligned_unwrapped_segment.size(), 0.0f);
-        for (std::size_t i = 0; i < aligned_unwrapped_segment.size(); ++i) {
-            filtered_segment[i] = aligned_unwrapped_segment[i] - low_pass_segment[i];
         }
 
         unwrapped_phase_all.insert(unwrapped_phase_all.end(),
-                                   aligned_unwrapped_segment.begin(),
-                                   aligned_unwrapped_segment.end());
-        filtered_phase_all.insert(
-            filtered_phase_all.end(), filtered_segment.begin(), filtered_segment.end());
+                                   segment_unwrapped.begin(),
+                                   segment_unwrapped.end());
+        filtered_phase_all.insert(filtered_phase_all.end(),
+                                  segment_filtered.begin(),
+                                  segment_filtered.end());
 
-        const std::vector<Real> window = hannWindow(filtered_segment.size());
         std::fill(fft_input.begin(), fft_input.end(), std::complex<double>(0.0, 0.0));
-        for (std::size_t i = 0; i < filtered_segment.size(); ++i) {
-            fft_input[i] = std::complex<double>(filtered_segment[i] * window[i], 0.0);
+        const std::vector<Real> win = hannWindow(length);
+        for (std::size_t i = 0; i < length; ++i) {
+            fft_input[i] = segment_filtered[i] * win[i];
         }
-
         fft.fwd(fft_output, fft_input);
-        for (std::size_t bin = 1U; bin < accumulated_power.size(); ++bin) {
-            accumulated_power[bin] += std::norm(fft_output[bin]);
+        for (std::size_t i = 0; i < nfft / 2U; ++i) {
+            accumulated_power[i] += std::norm(fft_output[i]);
         }
     }
 
@@ -659,174 +526,125 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
         times_s_out->assign(times_s.begin(), times_s.end());
     }
     if (unwrapped_phase_out != nullptr) {
-        unwrapped_phase_out->assign(unwrapped_phase_all.begin(), unwrapped_phase_all.end());
+        *unwrapped_phase_out = unwrapped_phase_all;
     }
     if (residual_phase_out != nullptr) {
-        residual_phase_out->assign(filtered_phase_all.begin(), filtered_phase_all.end());
+        *residual_phase_out = filtered_phase_all;
     }
 
-    Real best_power = 0.0f;
-    Real best_frequency_hz = 0.0f;
-    const std::size_t half = nfft / 2U;
-    for (std::size_t bin = 1U; bin < half; ++bin) {
-        const Real frequency_hz =
-            static_cast<Real>(bin) / (static_cast<Real>(nfft) * chirp_duration_s);
-        if (frequency_hz < kMinSearchFrequencyHz || frequency_hz > kMaxSearchFrequencyHz) {
-            continue;
+    double best_power = -1.0;
+    std::size_t best_bin = 0U;
+    const double min_bin = kMinSearchFrequencyHz * (static_cast<double>(nfft) * chirp_duration_s);
+    const double max_bin = kMaxSearchFrequencyHz * (static_cast<double>(nfft) * chirp_duration_s);
+
+    for (std::size_t i = static_cast<std::size_t>(std::max(1.0, std::floor(min_bin)));
+         i < std::min<std::size_t>(nfft / 2U, static_cast<std::size_t>(std::ceil(max_bin)));
+         ++i) {
+        if (accumulated_power[i] > best_power) {
+            best_power = accumulated_power[i];
+            best_bin = i;
         }
-        const Real power = accumulated_power[bin];
-        if (power > best_power) {
-            best_power = power;
-            best_frequency_hz = frequency_hz;
+    }
+
+    double best_frequency_hz = 0.0;
+    if (best_power > 0.0) {
+        best_frequency_hz = static_cast<double>(best_bin) / (static_cast<double>(nfft) * chirp_duration_s);
+        if (best_bin > 0U && best_bin + 1U < nfft / 2U) {
+            const PeakInterpResult interp = quadraticPeakOffsetChecked(
+                static_cast<Real>(accumulated_power[best_bin - 1]),
+                static_cast<Real>(accumulated_power[best_bin]),
+                static_cast<Real>(accumulated_power[best_bin + 1]));
+            if (interp.valid) {
+                best_frequency_hz = (static_cast<double>(best_bin) + interp.delta) /
+                                    (static_cast<double>(nfft) * chirp_duration_s);
+            }
         }
     }
 
     return best_frequency_hz;
 }
 
-double
-estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &batch_results,
-                                        double batch_period_s,
-                                        std::vector<double> *candidate_frequency_hz_out = nullptr,
-                                        std::vector<double> *candidate_power_out = nullptr,
-                                        double *peak_power_out = nullptr,
-                                        std::size_t *valid_batch_count_out = nullptr) {
-    constexpr Real kMinSearchFrequencyHz = 10.0f;
-    constexpr Real kMaxSearchFrequencyHz = 100.0f;
-    constexpr Real kHighPassCutoffHz = 10.0f;
-
-    if (batch_period_s <= 0.0f) {
-        return 0.0f;
+double estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &batch_results,
+                                               double batch_period_s,
+                                               std::vector<double> *candidate_frequency_hz_out = nullptr,
+                                               std::vector<double> *candidate_power_out = nullptr,
+                                               double *peak_power_out = nullptr,
+                                               std::size_t *valid_cpi_count_out = nullptr) {
+    if (batch_results.empty() || batch_period_s <= 0.0) {
+        return 0.0;
     }
 
-    struct SegmentBounds {
-        std::size_t begin = 0U;
-        std::size_t end = 0U;
-    };
-
-    std::vector<Real> doppler_trace_hz;
-    std::vector<SegmentBounds> segments;
-    doppler_trace_hz.reserve(batch_results.size());
-
-    std::size_t valid_batch_count = 0U;
-    for (const BatchResult &batch : batch_results) {
-        if (!batch.valid) {
-            continue;
+    std::vector<std::complex<double>> slow_time;
+    slow_time.reserve(batch_results.size());
+    std::size_t valid_count = 0;
+    for (const auto &batch : batch_results) {
+        if (batch.valid) {
+            slow_time.push_back(std::polar(1.0, static_cast<double>(batch.phase_rad)));
+            ++valid_count;
+        } else {
+            slow_time.push_back(std::complex<double>(0.0, 0.0));
         }
-        ++valid_batch_count;
     }
 
-    if (valid_batch_count_out != nullptr) {
-        *valid_batch_count_out = valid_batch_count;
+    if (valid_cpi_count_out != nullptr) {
+        *valid_cpi_count_out = valid_count;
     }
 
-    if (valid_batch_count < 4U) {
-        return 0.0f;
-    }
-
-    bool previous_valid = false;
-    for (const BatchResult &batch : batch_results) {
-        if (!batch.valid) {
-            previous_valid = false;
-            continue;
-        }
-
-        if (!previous_valid) {
-            segments.push_back(SegmentBounds{doppler_trace_hz.size(), doppler_trace_hz.size()});
-        }
-
-        doppler_trace_hz.push_back(batch.doppler_hz - batch.predicted_doppler_hz);
-        segments.back().end = doppler_trace_hz.size();
-        previous_valid = true;
-    }
-
-    std::size_t max_segment_length = 0U;
-    for (const SegmentBounds &segment : segments) {
-        max_segment_length = std::max(max_segment_length, segment.end - segment.begin);
-    }
-    if (max_segment_length < 4U) {
-        return 0.0f;
+    if (valid_count < 4U) {
+        return 0.0;
     }
 
     std::size_t nfft = 1U;
-    while (nfft < max_segment_length) {
+    while (nfft < slow_time.size()) {
         nfft <<= 1U;
     }
-    nfft <<= 2U;
+    nfft <<= 3U;
 
-    const Real batch_rate_hz = 1.0f / batch_period_s;
-    const std::size_t high_pass_window = std::max<std::size_t>(
-        3U, static_cast<std::size_t>(std::llround(batch_rate_hz / kHighPassCutoffHz)));
-
-    std::vector<Real> accumulated_power(nfft / 2U, 0.0f);
-    Eigen::FFT<Real> fft;
-    std::vector<Complex> fft_output;
-    std::vector<Complex> fft_input(nfft, Complex(0.0f, 0.0f));
-
-    for (const SegmentBounds &segment : segments) {
-        const std::size_t segment_length = segment.end - segment.begin;
-        if (segment_length < 4U) {
-            continue;
-        }
-        const std::vector<Real> filtered_segment(
-            doppler_trace_hz.begin() + static_cast<std::ptrdiff_t>(segment.begin),
-            doppler_trace_hz.begin() + static_cast<std::ptrdiff_t>(segment.end));
-        // const std::vector<double> doppler_segment(
-        //     doppler_trace_hz.begin() + static_cast<std::ptrdiff_t>(segment.begin),
-        //     doppler_trace_hz.begin() + static_cast<std::ptrdiff_t>(segment.end));
-        // const std::vector<double> low_pass_segment =
-        //     movingAverageSame(doppler_segment, std::min(high_pass_window, segment_length));
-        //
-        // std::vector<double> filtered_segment(segment_length, 0.0f);
-        // for (std::size_t i = 0; i < segment_length; ++i) {
-        //     filtered_segment[i] = doppler_segment[i] - low_pass_segment[i];
-        // }
-
-        const std::vector<Real> window = hannWindow(segment_length);
-        std::fill(fft_input.begin(), fft_input.end(), Complex(0.0f, 0.0f));
-        for (std::size_t i = 0; i < segment_length; ++i) {
-            fft_input[i] = Complex(filtered_segment[i] * window[i], 0.0f);
-        }
-
-        fft.fwd(fft_output, fft_input);
-        for (std::size_t bin = 1U; bin < accumulated_power.size(); ++bin) {
-            accumulated_power[bin] += std::norm(fft_output[bin]);
-        }
+    std::vector<std::complex<double>> fft_input(nfft, std::complex<double>(0.0, 0.0));
+    const std::vector<Real> win = hannWindow(slow_time.size());
+    for (std::size_t i = 0; i < slow_time.size(); ++i) {
+        fft_input[i] = slow_time[i] * static_cast<double>(win[i]);
     }
 
-    struct Candidate {
-        Real frequency_hz = 0.0f;
-        Real power = 0.0f;
-    };
-    std::vector<Candidate> candidates;
-    Real best_power = 0.0f;
-    Real best_frequency_hz = 0.0f;
+    Eigen::FFT<double> fft;
+    std::vector<std::complex<double>> fft_output;
+    fft.fwd(fft_output, fft_input);
+
+    std::vector<double> accumulated_power(nfft / 2U);
+    for (std::size_t i = 0; i < nfft / 2U; ++i) {
+        accumulated_power[i] = std::norm(fft_output[i]);
+    }
+
+    constexpr double kMinFreqHz = 5.0;
+    constexpr double kMaxFreqHz = 100.0;
+    const std::size_t min_bin =
+        static_cast<std::size_t>(std::floor(kMinFreqHz * static_cast<double>(nfft) * batch_period_s));
+    const std::size_t max_bin =
+        static_cast<std::size_t>(std::ceil(kMaxFreqHz * static_cast<double>(nfft) * batch_period_s));
+
+    double best_power = -1.0;
     std::size_t best_bin = 0U;
-    const std::size_t half = nfft / 2U;
-    for (std::size_t bin = 1U; bin < half; ++bin) {
-        const Real frequency_hz =
-            static_cast<Real>(bin) / (static_cast<Real>(nfft) * batch_period_s);
-        if (frequency_hz < kMinSearchFrequencyHz || frequency_hz > kMaxSearchFrequencyHz) {
-            continue;
-        }
-
-        const Real power = accumulated_power[bin];
-        candidates.push_back(Candidate{frequency_hz, power});
-        if (power > best_power) {
-            best_power = power;
-            best_frequency_hz = frequency_hz;
-            best_bin = bin;
+    std::vector<Candidate> candidates;
+    for (std::size_t i = std::max<std::size_t>(1U, min_bin);
+         i < std::min<std::size_t>(nfft / 2U, max_bin);
+         ++i) {
+        const double p = accumulated_power[i];
+        candidates.push_back({static_cast<double>(i) / (static_cast<double>(nfft) * batch_period_s), p});
+        if (p > best_power) {
+            best_power = p;
+            best_bin = i;
         }
     }
 
+    double best_frequency_hz = 0.0;
     if (best_bin > 0U && best_bin + 1U < accumulated_power.size()) {
         const PeakInterpResult interp =
-            quadraticPeakOffsetChecked(accumulated_power[best_bin - 1U],
-                                       accumulated_power[best_bin],
-                                       accumulated_power[best_bin + 1U]);
+            quadraticPeakOffsetChecked(static_cast<Real>(accumulated_power[best_bin - 1U]),
+                                       static_cast<Real>(accumulated_power[best_bin]),
+                                       static_cast<Real>(accumulated_power[best_bin + 1U]));
         if (interp.valid) {
-            best_frequency_hz = (static_cast<Real>(best_bin) + interp.delta) /
-                                (static_cast<Real>(nfft) * batch_period_s);
+            best_frequency_hz = (static_cast<double>(best_bin) + interp.delta) /
+                                (static_cast<double>(nfft) * batch_period_s);
         }
     }
 
@@ -855,16 +673,37 @@ estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &batch_re
     return best_frequency_hz;
 }
 
-} // namespace
+Vec3 measurementPosition(const MeasurementCandidate &measurement) {
+    return measurement.range_m * measurement.direction;
+}
+
+Vec3 measurementVelocity(const MeasurementCandidate &measurement) {
+    return measurement.radial_velocity_mps * measurement.direction;
+}
+
+Real measurementAzimuthDeg(const MeasurementCandidate &measurement) {
+    return azimuthDeg(measurement.direction);
+}
+
+Real measurementElevationDeg(const MeasurementCandidate &measurement) {
+    return elevationDeg(measurement.direction);
+}
+
+} // namespace detail
+
+using detail::AssignmentSolution;
+using detail::KinematicEstimate;
+using detail::PeakInterpResult;
+using detail::SceneObservation;
+using detail::SteeringGrid;
+using detail::Vec3;
+using namespace detail;
 
 StreamingTracker::StreamingTracker(const problem::ProblemDescription &description,
                                    DetectionConfig detection_config)
     : description_(description), radar_config_(makeRadarConfig(description)),
       detection_config_(detection_config),
       chirp_window_(std::make_unique<RingBuffer<ChirpBlock, kMaxCpiChirps>>()) {
-    if (description_.cars.size() != 1) {
-        throw std::runtime_error("StreamingTracker currently supports exactly one car");
-    }
     if (detection_config_.coherent_processing_interval_chirps > kMaxCpiChirps) {
         throw std::runtime_error("tracker CPI exceeds RingBuffer capacity");
     }
@@ -906,11 +745,9 @@ StreamingTracker::StreamingTracker(const problem::ProblemDescription &descriptio
         throw std::runtime_error("tracker range gate produced no bins");
     }
 
-    const std::vector<Complex> range_window =
-        makeComplexWindow(hannWindow(radar_config_.block_size));
+    range_window_ = makeComplexWindow(hannWindow(radar_config_.block_size));
     doppler_window_ =
         makeComplexWindow(hannWindow(detection_config_.coherent_processing_interval_chirps));
-    range_mix_coeff_.resize(radar_config_.block_size, Complex(0.0f, 0.0f));
 
     const SteeringGrid grid = makeSteeringGrid(radar_config_, detection_config_);
     steering_conj_ = grid.steering_conj;
@@ -920,7 +757,7 @@ StreamingTracker::StreamingTracker(const problem::ProblemDescription &descriptio
 
     // Doppler axis: zero-pad to 2x CPI for finer frequency resolution
     // (~305 Hz/bin instead of ~610 Hz/bin). The truth model uses
-    // f_D = 2*v_r/lambda (positive = approaching). The FFT on the beat-signal
+    // f_D = 2*v_r/lambda (positive = receding). The FFT on the beat-signal
     // slow-time produces the opposite sign, so we negate the axis.
     const std::size_t nfft_doppler = 2U * detection_config_.coherent_processing_interval_chirps;
     const std::vector<Real> doppler_axis_native_hz =
@@ -949,12 +786,6 @@ StreamingTracker::StreamingTracker(const problem::ProblemDescription &descriptio
     rd_power_scratch_.resize(nfft_doppler * range_bin_count_);
     rd_candidates_scratch_.reserve(range_bin_count_ * nfft_doppler);
 
-    if (!range_mix_coeff_initialized_) {
-        for (std::size_t i = 0; i < radar_config_.block_size; ++i) {
-            range_mix_coeff_[i] = range_window[i];
-        }
-    }
-
     // The simulator keeps a continuous TX history, so the first fast-time
     // samples of a chirp can include delayed energy from the previous chirp.
     // Blanking that prefix avoids wrap-around contamination. Cap the guard
@@ -972,13 +803,6 @@ StreamingTracker::StreamingTracker(const problem::ProblemDescription &descriptio
 void StreamingTracker::pushChirp(std::size_t chirp_index,
                                  std::span<const Complex> tx_chirp,
                                  std::span<const Complex> rx_block) {
-    if (!range_mix_coeff_initialized_) {
-        for (std::size_t i = 0; i < tx_chirp.size(); ++i) {
-            range_mix_coeff_[i] *= std::conj(tx_chirp[i]);
-        }
-        range_mix_coeff_initialized_ = true;
-    }
-
     if (tx_chirp.size() != radar_config_.block_size) {
         throw std::runtime_error("unexpected TX chirp size");
     }
@@ -986,8 +810,14 @@ void StreamingTracker::pushChirp(std::size_t chirp_index,
         throw std::runtime_error("unexpected RX block size");
     }
 
+    const std::size_t num_rx = radar_config_.numRx();
     ChirpBlock chirp_block{};
-    std::copy(rx_block.begin(), rx_block.end(), chirp_block.begin());
+    for (std::size_t sample = 0; sample < radar_config_.block_size; ++sample) {
+        const Complex dechirp = std::conj(tx_chirp[sample]);
+        for (std::size_t rx = 0; rx < num_rx; ++rx) {
+            chirp_block[sample * num_rx + rx] = rx_block[sample * num_rx + rx] * dechirp;
+        }
+    }
     chirp_window_->push_back(chirp_block);
     while (chirp_window_->size() > detection_config_.coherent_processing_interval_chirps) {
         chirp_window_->pop_front();
@@ -1004,121 +834,17 @@ void StreamingTracker::pushChirp(std::size_t chirp_index,
         return;
     }
 
-    BatchResult result = processCurrentWindow(start_chirp);
-
-    if (!result.valid) {
-        if (tracking_state_.initialized) {
-            const Real dt = std::max(0.0f, result.time_s - tracking_state_.time_s);
-            tracking_state_.position_m += tracking_state_.velocity_mps * dt;
-            const KinematicEstimate predicted = makeKinematicEstimate(radar_config_,
-                                                                      tracking_state_.position_m,
-                                                                      tracking_state_.velocity_mps,
-                                                                      tracking_state_.direction);
-            tracking_state_.time_s = result.time_s;
-            tracking_state_.range_m = predicted.range_m;
-            tracking_state_.radial_velocity_mps = predicted.radial_velocity_mps;
-            tracking_state_.doppler_hz = predicted.doppler_hz;
-            tracking_state_.direction = predicted.direction;
-
-            result.range_m = predicted.range_m;
-            result.doppler_hz = predicted.doppler_hz;
-            result.direction = predicted.direction;
-            result.predicted_range_m = predicted.range_m;
-            result.predicted_doppler_hz = predicted.doppler_hz;
-            result.predicted_direction = predicted.direction;
-        }
-        batch_results_.push_back(result);
-        return;
-    }
-    const Vec3 measured_position = result.range_m * result.direction;
-    const double measured_radial_velocity_mps =
-        0.5 * result.doppler_hz * radar_config_.wavelengthM();
-
-    if (!tracking_state_.initialized) {
-        tracking_state_.position_m = measured_position;
-        tracking_state_.velocity_mps = measured_radial_velocity_mps * result.direction;
-        tracking_state_.initialized = true;
-    } else {
-        const Real dt = std::max(0.0f, result.time_s - tracking_state_.time_s);
-        const Vec3 predicted_position =
-            tracking_state_.position_m + tracking_state_.velocity_mps * dt;
-
-        // Glide through position snaps, and kill velocity integration from position entirely.
-        constexpr double kPositionGain = 0.005;
-        constexpr double kVelocityGain = 0.0;         // Completely decoupled!
-        constexpr double kRadialVelocityGain = 0.002; // ~0.4 second time constant
-
-        const Vec3 residual = measured_position - predicted_position;
-        tracking_state_.position_m = predicted_position + kPositionGain * residual;
-
-        // Anchor the velocity vector ONLY using the precise Doppler measurement
-        const double radial_velocity_error_mps =
-            measured_radial_velocity_mps - tracking_state_.velocity_mps.dot(result.direction);
-        tracking_state_.velocity_mps +=
-            kRadialVelocityGain * radial_velocity_error_mps * result.direction;
-    }
-    // } else {
-    //     const double dt = std::max(0.001f, result.time_s - tracking_state_.time_s);
-    //     const Vec3 predicted_position =
-    //         tracking_state_.position_m + tracking_state_.velocity_mps * dt;
-    //
-    //     // Ultra-low gains to glide smoothly through AoA grid-snapping noise
-    //     constexpr double kPositionGain = 0.01f;
-    //     constexpr double kVelocityGain = 0.0001f;
-    //     constexpr double kRadialVelocityGain = 0.002f;
-    //
-    //     const Vec3 residual = measured_position - predicted_position;
-    //     tracking_state_.position_m = predicted_position + kPositionGain * residual;
-    //
-    //     // This is now safe. A 1-meter grid snap only alters velocity by ~0.5 m/s instead of 40
-    //     m/s tracking_state_.velocity_mps += (kVelocityGain / dt) * residual;
-    //
-    //     // Anchor the velocity vector using the highly accurate Doppler measurement
-    //     const double radial_velocity_error_mps =
-    //         measured_radial_velocity_mps - tracking_state_.velocity_mps.dot(result.direction);
-    //     tracking_state_.velocity_mps +=
-    //         kRadialVelocityGain * radial_velocity_error_mps * result.direction;
-    // }
-    // } else {
-    //     const double dt = std::max(0.001f, result.time_s - tracking_state_.time_s);
-    //     const Vec3 predicted_position = tracking_state_.position_m + tracking_state_.velocity_mps
-    //     * dt;
-    //
-    //     // Lower, stable gains for a high-rate radar tracker
-    //     constexpr double kPositionGain = 0.30f;
-    //     constexpr double kVelocityGain = 0.08f;
-    //     constexpr double kRadialVelocityGain = 0.45f;
-    //
-    //     const Vec3 residual = measured_position - predicted_position;
-    //     tracking_state_.position_m = predicted_position + kPositionGain * residual;
-    //     tracking_state_.velocity_mps = tracking_state_.velocity_mps + (kVelocityGain / dt) *
-    //     residual;
-    //
-    //     // Anchor the velocity vector using the highly accurate Doppler measurement
-    //     const double radial_velocity_error_mps =
-    //         measured_radial_velocity_mps - tracking_state_.velocity_mps.dot(result.direction);
-    //     tracking_state_.velocity_mps +=
-    //         kRadialVelocityGain * radial_velocity_error_mps * result.direction;
-    // }
-
-    const KinematicEstimate estimate = makeKinematicEstimate(
-        radar_config_, tracking_state_.position_m, tracking_state_.velocity_mps, result.direction);
-    tracking_state_.time_s = result.time_s;
-    tracking_state_.range_m = estimate.range_m;
-    tracking_state_.radial_velocity_mps = estimate.radial_velocity_mps;
-    tracking_state_.doppler_hz = estimate.doppler_hz;
-    tracking_state_.direction = estimate.direction;
-
-    batch_results_.push_back(result);
+    const SceneObservation observation = processCurrentWindow(start_chirp);
+    updateTracks(observation);
 }
 
-BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
+detail::SceneObservation StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
     const std::size_t n_chirps = detection_config_.coherent_processing_interval_chirps;
     const std::size_t nfft_doppler = n_chirps * 2U;
     const std::size_t num_rx = radar_config_.numRx();
     const std::size_t range_count = range_bin_count_;
 
-    // Range FFT: dechirp, window, and transform each chirp.
+    // Range FFT: window already dechirped data and transform each chirp.
     std::vector<Complex> &spec = spec_scratch_;
     std::vector<Complex> &fft_input = range_fft_input_;
     std::vector<Complex> &fft_output = range_fft_output_;
@@ -1132,7 +858,7 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
             std::fill_n(fft_input.begin(), range_wrap_guard_samples_, Complex(0.0f, 0.0f));
             for (std::size_t sample = range_wrap_guard_samples_; sample < radar_config_.block_size;
                  ++sample) {
-                fft_input[sample] = rx_block[sample * num_rx + rx] * range_mix_coeff_[sample];
+                fft_input[sample] = rx_block[sample * num_rx + rx] * range_window_[sample];
             }
 
             std::fill(fft_input.begin() + static_cast<std::ptrdiff_t>(radar_config_.block_size),
@@ -1150,9 +876,6 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
         }
     }
 
-    constexpr double kScoreEpsilon = 1.0e-12f;
-    constexpr std::size_t kMaxRangeDopplerCandidates = 6;
-
     // Static-clutter suppression: remove DC (mean) across slow-time.
     if (detection_config_.static_clutter_suppression_enable) {
         const double inv_n_chirps = 1.0 / static_cast<double>(n_chirps);
@@ -1166,30 +889,6 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
             }
         }
     }
-
-    auto insertCandidate =
-        [](std::array<CandidateScoreScratch, kMaxRangeDopplerCandidates> &top_candidates,
-           std::size_t &top_candidate_count,
-           const CandidateScoreScratch &candidate) {
-            std::size_t insert_pos = top_candidate_count;
-            if (top_candidate_count == kMaxRangeDopplerCandidates) {
-                if (candidate.score <= top_candidates[top_candidate_count - 1U].score) {
-                    return;
-                }
-                insert_pos = top_candidate_count - 1U;
-            } else {
-                ++top_candidate_count;
-            }
-
-            while (insert_pos > 0U && candidate.score > top_candidates[insert_pos - 1U].score) {
-                top_candidates[insert_pos] = top_candidates[insert_pos - 1U];
-                --insert_pos;
-            }
-            top_candidates[insert_pos] = candidate;
-        };
-
-    std::array<CandidateScoreScratch, kMaxRangeDopplerCandidates> top_candidates{};
-    std::size_t top_candidate_count = 0U;
 
     // Doppler FFT: zero-padded to 2x CPI for finer Doppler resolution.
     std::vector<Complex> &rd_cube = rd_cube_scratch_;
@@ -1222,350 +921,126 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
         power /= static_cast<Real>(num_rx);
     }
 
-    const std::size_t zero_doppler_bin = nfft_doppler / 2;
-    Real predicted_range_m = 0.0f;
-    Real predicted_doppler_hz = 0.0f;
-    Vec3 predicted_direction = Vec3::UnitX();
     const Real batch_time_s =
         (static_cast<Real>(start_chirp) + 0.5f * static_cast<Real>(n_chirps)) *
         radar_config_.chirp_duration_s;
-    const Real range_bin_spacing_m =
-        range_count > 1 ? std::abs(range_axis_sliced_m_[1] - range_axis_sliced_m_[0]) : 0.0f;
-    const Real doppler_bin_spacing_hz =
-        nfft_doppler > 1 ? std::abs(doppler_axis_hz_[1] - doppler_axis_hz_[0]) : 0.0f;
+    SceneObservation observation;
+    observation.time_s = batch_time_s;
+    observation.n_chirps = n_chirps;
+    observation.nfft_doppler = nfft_doppler;
+    observation.range_count = range_count;
+    observation.num_rx = num_rx;
+    observation.spec_cube = spec;
+    observation.rd_cube = rd_cube;
 
-    if (tracking_state_.initialized) {
-        const Real dt = std::max(0.0f, batch_time_s - tracking_state_.time_s);
-        const Vec3 predicted_position_m =
-            tracking_state_.position_m + tracking_state_.velocity_mps * dt;
-        const KinematicEstimate predicted = makeKinematicEstimate(radar_config_,
-                                                                  predicted_position_m,
-                                                                  tracking_state_.velocity_mps,
-                                                                  tracking_state_.direction);
-        predicted_range_m = predicted.range_m;
-        predicted_doppler_hz = predicted.doppler_hz;
-        predicted_direction = predicted.direction;
+    const std::vector<DetectionCell> detections =
+        detectLocalPeakCells(rd_power, range_count, nfft_doppler, detection_config_);
+
+    const std::vector<std::vector<DetectionCell>> clusters =
+        clusterNearbyPeaks(detections, detection_config_);
+
+    constexpr std::size_t kMaxClustersPerCpi = 16U;
+    const std::size_t cluster_count = std::min<std::size_t>(clusters.size(), kMaxClustersPerCpi);
+    observation.measurements.reserve(cluster_count);
+
+    if (cluster_count == 0) {
+        return observation;
     }
 
-    // Gate the search to a region around the prediction when initialized.
-    const std::size_t range_gate =
-        tracking_state_.initialized
-            ? static_cast<std::size_t>(
-                  std::max(static_cast<Real>(detection_config_.range_gate_bins),
-                           std::ceil(3.0f * detection_config_.range_association_sigma_m /
-                                     std::max(range_bin_spacing_m, 1.0e-6f))))
-            : range_count;
-    const std::size_t doppler_gate =
-        tracking_state_.initialized
-            ? static_cast<std::size_t>(
-                  std::max(static_cast<Real>(detection_config_.doppler_gate_bins),
-                           std::ceil(3.0f * detection_config_.doppler_association_sigma_hz /
-                                     std::max(doppler_bin_spacing_hz, 1.0e-6f))))
-            : nfft_doppler;
-
-    std::size_t center_rbin = range_count / 2;
-    std::size_t center_dbin = nfft_doppler / 2;
-    if (tracking_state_.initialized) {
-        center_rbin = nearestAxisBin(range_axis_sliced_m_, predicted_range_m);
-        center_dbin = nearestAxisBin(doppler_axis_hz_, predicted_doppler_hz);
-    }
-
-    const std::size_t r_start = (center_rbin > range_gate / 2) ? center_rbin - range_gate / 2 : 0;
-    const std::size_t r_end = std::min(range_count, center_rbin + range_gate / 2 + 1);
-    const std::size_t d_start =
-        (center_dbin > doppler_gate / 2) ? center_dbin - doppler_gate / 2 : 0;
-    const std::size_t d_end = std::min(nfft_doppler, center_dbin + doppler_gate / 2 + 1);
-
-    for (std::size_t dbin = d_start; dbin < d_end; ++dbin) {
-        if (detection_config_.zero_doppler_guard_bins > 0) {
-            const std::size_t low =
-                zero_doppler_bin > detection_config_.zero_doppler_guard_bins
-                    ? zero_doppler_bin - detection_config_.zero_doppler_guard_bins
-                    : 0;
-            const std::size_t high = std::min(
-                nfft_doppler - 1, zero_doppler_bin + detection_config_.zero_doppler_guard_bins);
-            if (dbin >= low && dbin <= high) {
-                continue;
-            }
-        }
-
-        const double candidate_doppler_hz = doppler_axis_hz_[dbin];
-        const double range_correction = (candidate_doppler_hz / radar_config_.chirpSlopeHzPerS()) *
-                                        (radar_config_.speed_of_light_mps / 2.0f);
-
-        for (std::size_t rbin = r_start; rbin < r_end; ++rbin) {
-            const double power = rd_power[dbin * range_count + rbin];
-            const double candidate_range_m =
-                range_axis_sliced_m_[static_cast<Eigen::Index>(rbin)] - range_correction;
-            double score = std::log(power + kScoreEpsilon);
-            if (tracking_state_.initialized) {
-                score += associationPenalty(candidate_range_m - predicted_range_m,
-                                            detection_config_.range_association_sigma_m);
-                score += associationPenalty(candidate_doppler_hz - predicted_doppler_hz,
-                                            detection_config_.doppler_association_sigma_hz);
-            }
-
-            CandidateScoreScratch candidate;
-            candidate.doppler_bin = dbin;
-            candidate.range_bin = rbin;
-            candidate.range_m = candidate_range_m;
-            candidate.doppler_hz = candidate_doppler_hz;
-            candidate.score = score;
-            insertCandidate(top_candidates, top_candidate_count, candidate);
-        }
-    }
-
-    if (top_candidate_count == 0U) {
-        throw std::runtime_error("tracker failed to find a valid range-doppler peak");
-    }
-
-    const std::size_t candidate_count = top_candidate_count;
-
-    // Select best candidate and run AoA beamforming.
-    double best_total_score = std::numeric_limits<double>::lowest();
-    std::size_t best_doppler_bin = top_candidates.front().doppler_bin;
-    std::size_t best_range_bin = top_candidates.front().range_bin;
-    std::size_t best_direction_index = 0;
-    double best_range_m = top_candidates.front().range_m;
-    double best_doppler_hz = top_candidates.front().doppler_hz;
-    std::array<Complex, kNumRx> best_snapshot{};
-    Vec3 best_direction = tracking_state_.initialized ? tracking_state_.direction : Vec3::UnitX();
-
-    const double predicted_azimuth_deg = azimuthDeg(predicted_direction);
-    const double predicted_elevation_deg = elevationDeg(predicted_direction);
-
-    for (std::size_t candidate_index = 0; candidate_index < candidate_count; ++candidate_index) {
-        const CandidateScoreScratch &candidate = top_candidates[candidate_index];
-        std::array<Complex, kNumRx> snapshot{};
+    // 1. Extract snapshots for all clusters at their peak RD cell.
+    Eigen::Matrix<Complex, kNumRx, Eigen::Dynamic> snapshots(kNumRx, cluster_count);
+    for (std::size_t i = 0; i < cluster_count; ++i) {
+        const auto &cluster = clusters[i];
+        const auto peak_it = std::max_element(
+            cluster.begin(), cluster.end(), [](const DetectionCell &lhs, const DetectionCell &rhs) {
+                return lhs.power < rhs.power;
+            });
         for (std::size_t rx = 0; rx < num_rx; ++rx) {
-            snapshot[rx] = rd_cube[cubeIndex(
-                candidate.doppler_bin, candidate.range_bin, rx, range_count, num_rx)];
-        }
-
-        Vec3 candidate_direction = Vec3::UnitX();
-        std::size_t candidate_direction_index = 0;
-        double best_direction_score =
-            detection_config_.aoa_enable ? std::numeric_limits<double>::lowest() : 0.0f;
-
-        if (detection_config_.aoa_enable) {
-            const std::size_t azimuth_count = detection_config_.azimuth_count;
-            const std::size_t elevation_count = detection_config_.elevation_count;
-            constexpr std::size_t kTargetCoarseElevationSamples = 96U;
-            const std::size_t coarse_elevation_stride =
-                (elevation_count <= 1U)
-                    ? 1U
-                    : std::max<std::size_t>(1U,
-                                            (elevation_count + kTargetCoarseElevationSamples - 1U) /
-                                                kTargetCoarseElevationSamples);
-
-            auto evaluate_direction = [&](std::size_t direction_index) {
-                Complex response(0.0f, 0.0f);
-                const std::size_t base = direction_index * num_rx;
-                for (std::size_t rx = 0; rx < num_rx; ++rx) {
-                    response += steering_conj_[base + rx] * snapshot[rx];
-                }
-
-                double direction_score = std::log(std::norm(response) + kScoreEpsilon);
-                if (tracking_state_.initialized) {
-                    direction_score += associationPenalty(
-                        angleDifferenceDeg(direction_azimuth_deg_[direction_index],
-                                           predicted_azimuth_deg),
-                        detection_config_.azimuth_association_sigma_deg);
-                    direction_score += associationPenalty(
-                        direction_elevation_deg_[direction_index] - predicted_elevation_deg,
-                        detection_config_.elevation_association_sigma_deg);
-                }
-
-                if (direction_score > best_direction_score) {
-                    best_direction_score = direction_score;
-                    candidate_direction = directions_[direction_index];
-                    candidate_direction_index = direction_index;
-                }
-            };
-
-            for (std::size_t azimuth_index = 0; azimuth_index < azimuth_count; ++azimuth_index) {
-                std::size_t best_coarse_elevation_index = 0U;
-                double best_coarse_score = std::numeric_limits<double>::lowest();
-
-                for (std::size_t elevation_index = 0; elevation_index < elevation_count;
-                     elevation_index += coarse_elevation_stride) {
-                    const std::size_t direction_index =
-                        azimuth_index * elevation_count + elevation_index;
-
-                    Complex response(0.0f, 0.0f);
-                    const std::size_t base = direction_index * num_rx;
-                    for (std::size_t rx = 0; rx < num_rx; ++rx) {
-                        response += steering_conj_[base + rx] * snapshot[rx];
-                    }
-
-                    double direction_score = std::log(std::norm(response) + kScoreEpsilon);
-                    if (tracking_state_.initialized) {
-                        direction_score += associationPenalty(
-                            angleDifferenceDeg(direction_azimuth_deg_[direction_index],
-                                               predicted_azimuth_deg),
-                            detection_config_.azimuth_association_sigma_deg);
-                        direction_score += associationPenalty(
-                            direction_elevation_deg_[direction_index] - predicted_elevation_deg,
-                            detection_config_.elevation_association_sigma_deg);
-                    }
-
-                    if (direction_score > best_coarse_score) {
-                        best_coarse_score = direction_score;
-                        best_coarse_elevation_index = elevation_index;
-                    }
-                }
-
-                const std::size_t refine_start =
-                    best_coarse_elevation_index > coarse_elevation_stride
-                        ? best_coarse_elevation_index - coarse_elevation_stride
-                        : 0U;
-                const std::size_t refine_stop = std::min(
-                    elevation_count, best_coarse_elevation_index + coarse_elevation_stride + 1U);
-
-                for (std::size_t elevation_index = refine_start; elevation_index < refine_stop;
-                     ++elevation_index) {
-                    const std::size_t direction_index =
-                        azimuth_index * elevation_count + elevation_index;
-                    evaluate_direction(direction_index);
-                }
-            }
-        }
-
-        const double total_score = candidate.score + best_direction_score;
-        if (total_score > best_total_score) {
-            best_total_score = total_score;
-            best_doppler_bin = candidate.doppler_bin;
-            best_range_bin = candidate.range_bin;
-            best_direction_index = candidate_direction_index;
-            best_range_m = candidate.range_m;
-            best_doppler_hz = candidate.doppler_hz;
-            best_direction = candidate_direction;
-            best_snapshot = snapshot;
+            snapshots(rx, i) = rd_cube[cubeIndex(peak_it->doppler_bin, peak_it->range_bin, rx, range_count, num_rx)];
         }
     }
 
-    // Sub-bin interpolation for Doppler.
-    double doppler_bin_offset = 0.0f;
-    if (best_doppler_bin > 0 && best_doppler_bin + 1 < nfft_doppler) {
-        auto d_interp = quadraticPeakOffsetChecked(
-            rd_power[(best_doppler_bin - 1) * range_count + best_range_bin],
-            rd_power[best_doppler_bin * range_count + best_range_bin],
-            rd_power[(best_doppler_bin + 1) * range_count + best_range_bin]);
+    // 2. Batched beamforming across all directions and all clusters.
+    Eigen::Map<const Eigen::Matrix<Complex, Eigen::Dynamic, kNumRx, Eigen::RowMajor>>
+        steering_matrix(steering_conj_.data(), directions_.size(), kNumRx);
+    
+    Eigen::Matrix<Complex, Eigen::Dynamic, Eigen::Dynamic> responses = 
+        steering_matrix * snapshots;
 
-        doppler_bin_offset = d_interp.valid ? d_interp.delta : 0.0f; // No gating!
-    }
+    // 3. Process each cluster to form measurement candidates.
+    for (std::size_t cluster_index = 0; cluster_index < cluster_count; ++cluster_index) {
+        const auto &cluster = clusters[cluster_index];
+        const auto peak_it = std::max_element(
+            cluster.begin(), cluster.end(), [](const DetectionCell &lhs, const DetectionCell &rhs) {
+                return lhs.power < rhs.power;
+            });
+        const std::size_t best_doppler_bin = peak_it->doppler_bin;
+        const std::size_t best_range_bin = peak_it->range_bin;
 
-    // Sub-bin interpolation for range.
-    double range_bin_offset = 0.0f;
-    if (best_range_bin > 0 && best_range_bin + 1 < range_count) {
-        auto r_interp = quadraticPeakOffsetChecked(
-            rd_power[best_doppler_bin * range_count + (best_range_bin - 1)],
-            rd_power[best_doppler_bin * range_count + best_range_bin],
-            rd_power[best_doppler_bin * range_count + (best_range_bin + 1)]);
+        int best_direction_index_int = 0;
+        responses.col(cluster_index).array().abs2().maxCoeff(&best_direction_index_int);
+        const std::size_t best_direction_index = static_cast<std::size_t>(best_direction_index_int);
+        const Vec3 best_direction = directions_[best_direction_index];
 
-        range_bin_offset = r_interp.valid ? r_interp.delta : 0.0f; // No gating!
-    }
-    // double doppler_bin_offset = 0.0f;
-    // if (best_doppler_bin > 0 && best_doppler_bin + 1 < nfft_doppler) {
-    //     auto d_interp = quadraticPeakOffsetChecked(
-    //         rd_power[(best_doppler_bin - 1) * range_count + best_range_bin],
-    //         rd_power[best_doppler_bin * range_count + best_range_bin],
-    //         rd_power[(best_doppler_bin + 1) * range_count + best_range_bin]);
-    //
-    //     double doppler_delta_raw = d_interp.valid ? d_interp.delta : 0.0f;
-    //     double doppler_hz_raw =
-    //         interpolateAxis(doppler_axis_hz_, nfft_doppler, best_doppler_bin, doppler_delta_raw);
-    //
-    //     bool bad_doppler_interp = false;
-    //     if (tracking_state_.initialized) {
-    //         double doppler_jump_hz = std::abs(doppler_hz_raw - predicted_doppler_hz);
-    //         bad_doppler_interp = doppler_jump_hz > detection_config_.doppler_interp_gate_hz;
-    //     }
-    //
-    //     doppler_bin_offset = bad_doppler_interp ? 0.0f : doppler_delta_raw;
-    // }
-    //
-    // // Sub-bin interpolation for range.
-    // double range_bin_offset = 0.0f;
-    // if (best_range_bin > 0 && best_range_bin + 1 < range_count) {
-    //     auto r_interp = quadraticPeakOffsetChecked(
-    //         rd_power[best_doppler_bin * range_count + (best_range_bin - 1)],
-    //         rd_power[best_doppler_bin * range_count + best_range_bin],
-    //         rd_power[best_doppler_bin * range_count + (best_range_bin + 1)]);
-    //
-    //     double range_offset_raw = r_interp.valid ? r_interp.delta : 0.0f;
-    //
-    //     bool bad_range_interp = false;
-    //     if (tracking_state_.initialized) {
-    //         double refined_range_candidate = interpolateAxis(
-    //             range_axis_sliced_m_, range_count, best_range_bin, range_offset_raw);
-    //         const double candidate_doppler_hz = doppler_axis_hz_[best_doppler_bin];
-    //         const double range_correction =
-    //             (candidate_doppler_hz / radar_config_.chirpSlopeHzPerS()) *
-    //             (radar_config_.speed_of_light_mps / 2.0f);
-    //         refined_range_candidate -= range_correction;
-    //         double range_jump_m = std::abs(refined_range_candidate - predicted_range_m);
-    //         bad_range_interp = range_jump_m > detection_config_.range_interp_gate_m;
-    //     }
-    //
-    //     range_bin_offset = bad_range_interp ? 0.0f : range_offset_raw;
-    // }
-    //
-    best_doppler_hz = interpolateAxis(doppler_axis_hz_, best_doppler_bin, doppler_bin_offset);
-    const double refined_raw_range_m =
-        interpolateAxis(range_axis_sliced_m_, best_range_bin, range_bin_offset);
-    const double refined_range_correction = (best_doppler_hz / radar_config_.chirpSlopeHzPerS()) *
-                                            (radar_config_.speed_of_light_mps / 2.0f);
-    best_range_m = refined_raw_range_m - refined_range_correction;
-
-    // Measurement gating.
-    const Real max_range_jump_m = std::max(
-        detection_config_.range_association_sigma_m,
-        (static_cast<Real>(detection_config_.range_gate_bins) + 1.0f) * range_bin_spacing_m);
-    const Real max_doppler_jump_hz = std::max(
-        detection_config_.doppler_association_sigma_hz,
-        (static_cast<Real>(detection_config_.doppler_gate_bins) + 1.5f) * doppler_bin_spacing_hz);
-
-    bool range_ok = !tracking_state_.initialized ||
-                    std::abs(best_range_m - predicted_range_m) < max_range_jump_m;
-    bool doppler_ok = !tracking_state_.initialized ||
-                      std::abs(best_doppler_hz - predicted_doppler_hz) < max_doppler_jump_hz;
-
-    BatchResult result;
-    result.time_s = batch_time_s;
-    result.predicted_range_m = predicted_range_m;
-    result.predicted_doppler_hz = predicted_doppler_hz;
-    result.predicted_direction = predicted_direction;
-    result.slow_time_phase_rad.assign(n_chirps, 0.0f);
-    result.doppler_slice_power.assign(nfft_doppler, 0.0f);
-
-    if (!std::isfinite(best_range_m) || !std::isfinite(best_doppler_hz) || !range_ok ||
-        !doppler_ok) {
-        result.valid = false;
-        return result;
-    }
-
-    result.valid = true;
-    result.range_m = best_range_m;
-    result.doppler_hz = best_doppler_hz;
-    Complex beamformed_response(0.0f, 0.0f);
-    if (best_direction_index < directions_.size()) {
-        const std::size_t base = best_direction_index * num_rx;
-        for (std::size_t rx = 0; rx < num_rx; ++rx) {
-            beamformed_response += steering_conj_[base + rx] * best_snapshot[rx];
+        Real doppler_bin_offset = 0.0f;
+        if (best_doppler_bin > 0U && best_doppler_bin + 1U < nfft_doppler) {
+            const PeakInterpResult interp = quadraticPeakOffsetChecked(
+                rd_power[(best_doppler_bin - 1U) * range_count + best_range_bin],
+                rd_power[best_doppler_bin * range_count + best_range_bin],
+                rd_power[(best_doppler_bin + 1U) * range_count + best_range_bin]);
+            doppler_bin_offset = interp.valid ? interp.delta : 0.0f;
         }
-    } else {
-        beamformed_response = best_snapshot[0];
-    }
-    result.phase_rad = std::arg(beamformed_response);
-    result.range_bin_offset = range_bin_offset;
-    result.doppler_bin_offset = doppler_bin_offset;
-    result.direction = best_direction;
-    result.range_bin = best_range_bin;
-    result.doppler_bin = best_doppler_bin;
-    result.azimuth_bin = best_direction_index / detection_config_.elevation_count;
-    result.elevation_bin = best_direction_index % detection_config_.elevation_count;
-    if (best_direction_index < directions_.size()) {
+
+        Real range_bin_offset = 0.0f;
+        if (best_range_bin > 0U && best_range_bin + 1U < range_count) {
+            const PeakInterpResult interp = quadraticPeakOffsetChecked(
+                rd_power[best_doppler_bin * range_count + (best_range_bin - 1U)],
+                rd_power[best_doppler_bin * range_count + best_range_bin],
+                rd_power[best_doppler_bin * range_count + (best_range_bin + 1U)]);
+            range_bin_offset = interp.valid ? interp.delta : 0.0f;
+        }
+
+        const Real doppler_hz =
+            interpolateAxis(doppler_axis_hz_, best_doppler_bin, doppler_bin_offset);
+        const Real raw_range_m =
+            interpolateAxis(range_axis_sliced_m_, best_range_bin, range_bin_offset);
+        const Real range_correction = kRangeDopplerCouplingSign *
+                                      (doppler_hz / radar_config_.chirpSlopeHzPerS()) *
+                                      (radar_config_.speed_of_light_mps / 2.0f);
+        const Real range_m = raw_range_m + range_correction;
+        if (!std::isfinite(range_m) || !std::isfinite(doppler_hz) || range_m <= 0.0f) {
+            continue;
+        }
+
+        MeasurementCandidate measurement;
+        measurement.time_s = batch_time_s;
+        measurement.range_m = range_m;
+        measurement.doppler_hz = doppler_hz;
+        measurement.radial_velocity_mps = 0.5f * doppler_hz * radar_config_.wavelengthM();
+        measurement.range_bin_offset = range_bin_offset;
+        measurement.doppler_bin_offset = doppler_bin_offset;
+        measurement.direction = best_direction;
+        measurement.range_bin = best_range_bin;
+        measurement.doppler_bin = best_doppler_bin;
+        measurement.azimuth_bin = best_direction_index / detection_config_.elevation_count;
+        measurement.elevation_bin = best_direction_index % detection_config_.elevation_count;
+        measurement.cluster_size = cluster.size();
+        measurement.cells = cluster;
+        measurement.doppler_slice_power.assign(nfft_doppler, 0.0f);
+        measurement.slow_time_phase_rad.assign(n_chirps, 0.0f);
+
+        double integrated_power = 0.0;
+        double peak_power = 0.0;
+        for (const DetectionCell &cell : cluster) {
+            integrated_power += cell.power;
+            peak_power = std::max<double>(peak_power, cell.power);
+        }
+        measurement.integrated_power = static_cast<Real>(integrated_power);
+        measurement.peak_power = static_cast<Real>(peak_power);
+
+        const Complex beamformed_response = responses(best_direction_index, cluster_index);
+        measurement.phase_rad = std::arg(beamformed_response);
+
         const std::size_t base = best_direction_index * num_rx;
         for (std::size_t chirp = 0; chirp < n_chirps; ++chirp) {
             Complex slow_time_response(0.0f, 0.0f);
@@ -1574,133 +1049,80 @@ BatchResult StreamingTracker::processCurrentWindow(std::size_t start_chirp) {
                     steering_conj_[base + rx] *
                     spec[cubeIndex(chirp, best_range_bin, rx, range_count, num_rx)];
             }
-            result.slow_time_phase_rad[chirp] = std::arg(slow_time_response);
+            measurement.slow_time_phase_rad[chirp] = std::arg(slow_time_response);
         }
+
+        for (std::size_t dbin = 0; dbin < nfft_doppler; ++dbin) {
+            measurement.doppler_slice_power[dbin] = rd_power[dbin * range_count + best_range_bin];
+        }
+        observation.measurements.push_back(std::move(measurement));
     }
-    for (std::size_t dbin = 0; dbin < nfft_doppler; ++dbin) {
-        result.doppler_slice_power[dbin] = rd_power[dbin * range_count + best_range_bin];
-    }
-    return result;
+
+    observation.measurements = mergeNearbyMeasurements(observation.measurements, detection_config_);
+    observation.measurements = selectTopMeasurements(std::move(observation.measurements),
+                                                     detection_config_.max_measurements_per_cpi);
+
+    return observation;
 }
 
-TrackSummary StreamingTracker::buildSummary() const {
-    TrackSummary summary;
-    summary.batch_results = batch_results_;
-    summary.microdoppler_truth_frequency_hz =
-        description_.cars.empty() ? 0.0f : description_.cars.front().bounce_frequency_hz;
-    summary.velocity_axis_mps.assign(velocity_axis_mps_.begin(), velocity_axis_mps_.end());
-
-    if (batch_results_.empty()) {
-        return summary;
+std::vector<StreamingTracker::AoAPeak>
+StreamingTracker::estimateTopAoAs(std::span<const Complex> snapshot, std::size_t n) const {
+    if (snapshot.size() != radar_config_.numRx()) {
+        return {};
     }
 
-    const double wavelength_m = radar_config_.wavelengthM();
+    const std::size_t num_rx = radar_config_.numRx();
+    const std::size_t grid_size = directions_.size();
+    std::vector<AoAPeak> peaks;
 
-    summary.times_s.reserve(batch_results_.size());
-    summary.raw_positions_m.reserve(batch_results_.size());
-    summary.smoothed_positions_m.reserve(batch_results_.size());
-    summary.ranges_m.reserve(batch_results_.size());
-    summary.radial_velocity_mps.reserve(batch_results_.size());
-    summary.unwrapped_phase_rad.reserve(batch_results_.size());
-    summary.detrended_phase_rad.reserve(batch_results_.size());
-    summary.cartesian_velocity_mps.reserve(batch_results_.size());
-    summary.truth_metrics.reserve(batch_results_.size());
-
-    std::vector<double> raw_x(batch_results_.size());
-    std::vector<double> raw_y(batch_results_.size());
-    std::vector<double> raw_z(batch_results_.size());
-
-    for (std::size_t i = 0; i < batch_results_.size(); ++i) {
-        const BatchResult &batch = batch_results_[i];
-        summary.times_s.push_back(batch.time_s);
-        const Vec3 raw_xyz = batch.range_m * batch.direction;
-        summary.raw_positions_m.push_back(raw_xyz);
-        summary.ranges_m.push_back(batch.range_m);
-        summary.radial_velocity_mps.push_back(0.5f * batch.doppler_hz * wavelength_m);
-        raw_x[i] = raw_xyz.x();
-        raw_y[i] = raw_xyz.y();
-        raw_z[i] = raw_xyz.z();
-        summary.truth_metrics.push_back(truthAtTime(description_, batch.time_s));
-    }
-
-    std::vector<double> microdoppler_times_s;
-    std::vector<double> microdoppler_unwrapped_phase;
-    std::vector<double> residual_phase_example;
-    std::vector<double> microdoppler_candidate_frequency_hz;
-    std::vector<double> microdoppler_candidate_power;
-    const double phase_microdoppler_frequency_hz =
-        estimateDominantCpiResidualFrequencyHz(batch_results_,
-                                               static_cast<double>(radar_config_.chirp_duration_s),
-                                               &microdoppler_times_s,
-                                               &microdoppler_unwrapped_phase,
-                                               &residual_phase_example);
-    summary.microdoppler_phase_frequency_hz = estimateDominantBatchDopplerFrequencyHz(
-        batch_results_,
-        static_cast<double>(detection_config_.hop_chirps) * radar_config_.chirp_duration_s,
-        &microdoppler_candidate_frequency_hz,
-        &microdoppler_candidate_power,
-        &summary.microdoppler_peak_power,
-        &summary.microdoppler_valid_cpi_count);
-    if (summary.microdoppler_phase_frequency_hz <= 0.0f) {
-        summary.microdoppler_phase_frequency_hz = phase_microdoppler_frequency_hz;
-    }
-    summary.unwrapped_phase_rad = microdoppler_unwrapped_phase;
-    summary.detrended_phase_rad = residual_phase_example;
-    summary.microdoppler_candidate_frequency_hz = microdoppler_candidate_frequency_hz;
-    summary.microdoppler_candidate_power = microdoppler_candidate_power;
-    const double microdoppler_error_hz =
-        summary.microdoppler_phase_frequency_hz - summary.microdoppler_truth_frequency_hz;
-    summary.microdoppler_frequency_rmse_hz =
-        std::sqrt(microdoppler_error_hz * microdoppler_error_hz);
-    if (!summary.detrended_phase_rad.empty()) {
-        double sum = 0.0f;
-        double squared_sum = 0.0f;
-        for (double sample : summary.detrended_phase_rad) {
-            sum += sample;
-            squared_sum += sample * sample;
+    for (std::size_t i = 0; i < grid_size; ++i) {
+        Complex response(0.0f, 0.0f);
+        const std::size_t base = i * num_rx;
+        for (std::size_t rx = 0; rx < num_rx; ++rx) {
+            response += steering_conj_[base + rx] * snapshot[rx];
         }
-        summary.microdoppler_residual_phase_mean_rad =
-            sum / static_cast<double>(summary.detrended_phase_rad.size());
-        summary.microdoppler_residual_phase_rms_rad =
-            std::sqrt(squared_sum / static_cast<double>(summary.detrended_phase_rad.size()));
-        double variance_sum = 0.0f;
-        for (double sample : summary.detrended_phase_rad) {
-            const double centered = sample - summary.microdoppler_residual_phase_mean_rad;
-            variance_sum += centered * centered;
-        }
-        summary.microdoppler_residual_phase_stddev_rad =
-            std::sqrt(variance_sum / static_cast<double>(summary.detrended_phase_rad.size()));
+        const Real score = std::norm(response);
+        peaks.push_back({direction_azimuth_deg_[i], direction_elevation_deg_[i], score, directions_[i]});
     }
 
-    const std::vector<double> &smooth_x = raw_x;
-    const std::vector<double> &smooth_y = raw_y;
-    const std::vector<double> &smooth_z = raw_z;
+    std::sort(peaks.begin(), peaks.end(), [](const AoAPeak &a, const AoAPeak &b) {
+        return a.score > b.score;
+    });
 
-    for (std::size_t i = 0; i < batch_results_.size(); ++i) {
-        summary.smoothed_positions_m.emplace_back(smooth_x[i], smooth_y[i], smooth_z[i]);
+    if (peaks.size() > n) {
+        peaks.resize(n);
     }
-
-    const std::vector<double> vx = gradient(smooth_x, summary.times_s);
-    const std::vector<double> vy = gradient(smooth_y, summary.times_s);
-    const std::vector<double> vz = gradient(smooth_z, summary.times_s);
-
-    for (std::size_t i = 0; i < batch_results_.size(); ++i) {
-        summary.cartesian_velocity_mps.emplace_back(vx[i], vy[i], vz[i]);
-    }
-
-    return summary;
+    return peaks;
 }
 
-problem::SimulationMetrics truthAtTime(const problem::ProblemDescription &description,
-                                       Real time_s) {
-    if (description.cars.empty()) {
-        throw std::runtime_error("truthAtTime requires at least one car");
+std::size_t StreamingTracker::getRangeBin(Real range_m) const {
+    return detail::nearestAxisBin(range_axis_sliced_m_, range_m);
+}
+
+Complex StreamingTracker::computeRangeFftBin(std::span<const Complex> dechirped_chirp,
+                                             std::size_t rx,
+                                             std::size_t range_bin) const {
+    if (range_bin >= range_indices_.size()) {
+        return {0.0f, 0.0f};
     }
 
-    const CarDynamics dynamics(description.cars.front());
-    const radar::TargetObservation observation =
-        radar::observeTarget(dynamics, description.radar, time_s);
-    return radar::makeSimulationMetrics(time_s, observation);
+    const std::size_t num_rx = radar_config_.numRx();
+    const std::size_t nfft = range_fft_input_.size();
+    
+    // This is a bit inefficient for a single bin, but ensures consistency with processCurrentWindow
+    std::vector<Complex> fft_input(nfft, Complex(0.0f, 0.0f));
+    for (std::size_t sample = range_wrap_guard_samples_; sample < radar_config_.block_size; ++sample) {
+        fft_input[sample] = dechirped_chirp[sample * num_rx + rx] * range_window_[sample];
+    }
+    
+    // We use a local FFT to avoid mutating member scratchpads in a const method if possible,
+    // but StreamingTracker has an Eigen::FFT member. Since this is for offline analysis, 
+    // we'll just do it simply.
+    Eigen::FFT<Real> fft;
+    std::vector<Complex> fft_output;
+    fft.fwd(fft_output, fft_input);
+    
+    return fft_output[static_cast<std::size_t>(range_indices_[range_bin])];
 }
 
 } // namespace fmcw_tracker
