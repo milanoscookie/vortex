@@ -9,43 +9,44 @@
 
 namespace problem {
 
-using Real = float;
+using Real = double;
 using AmpReal = double;
-using Vec3 = Eigen::Vector3f;
+using Vec3 = Eigen::Vector3d;
 using SignalComplex = std::complex<Real>;
 using AmplitudeComplex = std::complex<AmpReal>;
 using size_t = std::size_t;
 
 struct Constants {
-    static inline constexpr Real kPi = 3.14159265358979323846f;
-    static inline constexpr Real kSpeedOfLightMps = 299'792'458.0f;
-    static inline constexpr Real kInvSqrt2 = 0.70710678f;
+    static constexpr Real kPi = 3.14159265358979323846f;
+    static constexpr Real kSpeedOfLightMps = 299'792'458.0f;
+    static constexpr Real kInvSqrt2 = 0.70710678f;
 };
 struct RadarSettings {
-    static inline constexpr size_t kProbeNumX = 4;
-    static inline constexpr size_t kProbeNumY = 4;
-    static inline constexpr size_t kProbeNumElements = kProbeNumX * kProbeNumY;
-    
+    static constexpr size_t kProbeNumX = 4;
+    static constexpr size_t kProbeNumY = 4;
+    static constexpr size_t kProbeNumElements = kProbeNumX * kProbeNumY;
+
     // 400 MHz gives a crisp 0.375m theoretical range bin resolution
-    static inline constexpr Real kDefaultBandwidthHz = 400.0e6f;
+    static constexpr Real kDefaultBandwidthHz = 1000.0e6f;
 
     // 160 MHz sample rate prevents aliasing out to 500m
-    static inline constexpr Real kDefaultSampleRateHz = 160.0e6f;    
+    static constexpr Real kDefaultSampleRateHz = 160.0e6f;
     // 4096 samples / 160 MHz = 25.6 microseconds
-    static inline constexpr Real kDefaultChirpDurationS = 25.6e-6f;
-    
-    static inline constexpr size_t kRadarBlockSize =
+    static constexpr Real kDefaultChirpDurationS = 25.6e-6f;
+
+    static constexpr size_t kRadarBlockSize =
         static_cast<size_t>(kDefaultSampleRateHz * kDefaultChirpDurationS + 0.5f);
-        
-    static inline constexpr Real kDefaultCarrierHz = 77.0e9f;
-    static inline constexpr Real kDefaultMinRangeM = 1.0f;
-    static inline constexpr Real kDefaultMaxRangeM = 500.0f;
-    
-    static inline constexpr Real kDefaultFieldGain = 1.0f;
-    static inline constexpr AmpReal kDefaultReceiverNoiseStddev = 0.0;
-    static inline constexpr AmpReal kDefaultReceiverNoiseMean = 0.0;
-    static inline constexpr AmpReal kDefaultReceiverNoiseDistributionStddev = 1.0;
-    static inline constexpr bool kDefaultUseStdNormalDistribution = true;
+
+    static constexpr Real kDefaultCarrierHz = 77.0e9f;
+    static constexpr Real kDefaultMinRangeM = 1.0f;
+    static constexpr Real kDefaultMaxRangeM = 500.0f;
+
+    static constexpr Real kDefaultFieldGain = 1.0f;
+    static constexpr AmpReal kDefaultReceiverNoiseStddev = 4.0e-7;
+    // static constexpr AmpReal kDefaultReceiverNoiseStddev = 2.0e-7;
+    static constexpr AmpReal kDefaultReceiverNoiseMean = 0.0;
+    static constexpr AmpReal kDefaultReceiverNoiseDistributionStddev = 1.0;
+    static constexpr bool kDefaultUseStdNormalDistribution = true;
 
     Real bandwidth_hz = kDefaultBandwidthHz;
     Real sample_rate_hz = kDefaultSampleRateHz;
@@ -60,44 +61,44 @@ struct RadarSettings {
     bool receiver_noise_use_std_normal_distribution = kDefaultUseStdNormalDistribution;
 };
 // struct RadarSettings {
-//     static inline constexpr size_t kProbeNumX = 4;
-//     static inline constexpr size_t kProbeNumY = 4;
-//     static inline constexpr size_t kProbeNumElements = kProbeNumX * kProbeNumY;
+//     static constexpr size_t kProbeNumX = 4;
+//     static constexpr size_t kProbeNumY = 4;
+//     static constexpr size_t kProbeNumElements = kProbeNumX * kProbeNumY;
 //     // // 400 MHz gives a crisp 0.375m theoretical range bin resolution
-//     // static inline constexpr double kDefaultBandwidthHz = 400.0e6f;
+//     // static constexpr double kDefaultBandwidthHz = 400.0e6f;
 //     //
 //     // // We need 4096 samples to prevent aliasing out to 500m.
 //     // // To process 4096 samples in a reasonable chirp time, we need a fast ADC.
-//     // static inline constexpr double kDefaultSampleRateHz = 160.0e6f;
+//     // static constexpr double kDefaultSampleRateHz = 160.0e6f;
 //     //
 //     // // 4096 samples / 160 MHz = 25.6 microseconds
-//     // static inline constexpr double kDefaultChirpDurationS = 25.6e-6f;
+//     // static constexpr double kDefaultChirpDurationS = 25.6e-6f;
 //     //
 //     // // This will perfectly compute to 4096
-//     // static inline constexpr size_t kRadarBlockSize =
+//     // static constexpr size_t kRadarBlockSize =
 //     //     static_cast<size_t>(kDefaultSampleRateHz * kDefaultChirpDurationS + 0.5f);
-//     // static inline constexpr double kDefaultCarrierHz = 77.0e9f;
-//     // static inline constexpr double kDefaultMinRangeM = 1.0f;
-//     // static inline constexpr double kDefaultMaxRangeM = 500.0f;
-//     // static inline constexpr double kDefaultFieldGain = 1.0f;
-//     // static inline constexpr double kDefaultReceiverNoiseStddev = 0.0f;
-//     // static inline constexpr double kDefaultReceiverNoiseMean = 0.0f;
-//     // static inline constexpr double kDefaultReceiverNoiseDistributionStddev = 1.0f;
-//     // static inline constexpr bool kDefaultUseStdNormalDistribution = true;
+//     // static constexpr double kDefaultCarrierHz = 77.0e9f;
+//     // static constexpr double kDefaultMinRangeM = 1.0f;
+//     // static constexpr double kDefaultMaxRangeM = 500.0f;
+//     // static constexpr double kDefaultFieldGain = 1.0f;
+//     // static constexpr double kDefaultReceiverNoiseStddev = 0.0f;
+//     // static constexpr double kDefaultReceiverNoiseMean = 0.0f;
+//     // static constexpr double kDefaultReceiverNoiseDistributionStddev = 1.0f;
+//     // static constexpr bool kDefaultUseStdNormalDistribution = true;
 //
-//     static inline constexpr Real kDefaultBandwidthHz = 10.0e6f;
-//     static inline constexpr Real kDefaultSampleRateHz = 2.0f * kDefaultBandwidthHz;
-//     static inline constexpr Real kDefaultChirpDurationS = 12.8e-6f;
-//     static inline constexpr size_t kRadarBlockSize =
+//     static constexpr Real kDefaultBandwidthHz = 10.0e6f;
+//     static constexpr Real kDefaultSampleRateHz = 2.0f * kDefaultBandwidthHz;
+//     static constexpr Real kDefaultChirpDurationS = 12.8e-6f;
+//     static constexpr size_t kRadarBlockSize =
 //         static_cast<size_t>(kDefaultSampleRateHz * kDefaultChirpDurationS + 0.5f);
-//     static inline constexpr Real kDefaultCarrierHz = 77.0e9f;
-//     static inline constexpr Real kDefaultMinRangeM = 1.0f;
-//     static inline constexpr Real kDefaultMaxRangeM = 500.0f;
-//     static inline constexpr Real kDefaultFieldGain = 1.0f;
-//     static inline constexpr AmpReal kDefaultReceiverNoiseStddev = 0.0;
-//     static inline constexpr AmpReal kDefaultReceiverNoiseMean = 0.0;
-//     static inline constexpr AmpReal kDefaultReceiverNoiseDistributionStddev = 1.0;
-//     static inline constexpr bool kDefaultUseStdNormalDistribution = true;
+//     static constexpr Real kDefaultCarrierHz = 77.0e9f;
+//     static constexpr Real kDefaultMinRangeM = 1.0f;
+//     static constexpr Real kDefaultMaxRangeM = 500.0f;
+//     static constexpr Real kDefaultFieldGain = 1.0f;
+//     static constexpr AmpReal kDefaultReceiverNoiseStddev = 0.0;
+//     static constexpr AmpReal kDefaultReceiverNoiseMean = 0.0;
+//     static constexpr AmpReal kDefaultReceiverNoiseDistributionStddev = 1.0;
+//     static constexpr bool kDefaultUseStdNormalDistribution = true;
 //
 //     Real bandwidth_hz = kDefaultBandwidthHz;
 //     Real sample_rate_hz = kDefaultSampleRateHz;
@@ -128,8 +129,8 @@ struct FloorplaneClutterSettings {
 };
 
 struct SimulatorSettings {
-    Real burst_duration_s = 1.10f;
-    Real tracking_duration_s = 1.10f;
+    Real burst_duration_s = 0.10f;
+    Real tracking_duration_s = 0.10f;
     Real split_duration_s = 15.0f;
     Real prediction_duration_s = 15.0f;
     std::uint32_t random_seed = 1U;
@@ -137,9 +138,8 @@ struct SimulatorSettings {
 };
 
 struct CarSettings {
-    Vec3 initial_position_m = Vec3(50.0f, 50.0f, 100.0f);
-    Vec3 base_velocity_mps = Vec3(20.0f, 20.0f, 0.0f);
-    Real yaw_rad = 0.0f;
+    Vec3 initial_position_m = Vec3(0.0f, 0.0f, 100.0f);
+    Vec3 base_velocity_mps = Vec3(4.0f, 4.0f, 0.0f);
     Real length_m = 4.5f;
     Real width_m = 1.8f;
     Real height_m = 1.5f;
@@ -152,7 +152,6 @@ struct CarSettings {
 struct VehicleState {
     Vec3 center_m = Vec3::Zero();
     Vec3 velocity_mps = Vec3::Zero();
-    Real yaw_rad = 0.0f;
     SignalComplex reflectivity = {1.0f, 0.0f};
 };
 
@@ -183,29 +182,29 @@ inline const ProblemDescription kDefaultProblemDescription{
     .cars = {CarSettings{
                  .initial_position_m = Vec3(82.0f, -38.0f, 145.0f),
                  .base_velocity_mps = Vec3(18.0f, 6.0f, 0.0f),
-                 .yaw_rad = -0.15f,
-                 .bounce_amplitude_m = 0.0015f,
-                 .bounce_frequency_hz = 60.0f,
+                 // .base_velocity_mps = Vec3::Zero(),
+                 .bounce_amplitude_m = 0.0010f,
+                 .bounce_frequency_hz = 510.0f,
                  .bounce_phase_rad = 0.2f,
                  .reflectivity = std::polar(1.0f, 3.1f),
              },
              CarSettings{
                  .initial_position_m = Vec3(122.0f, 26.0f, 152.0f),
                  .base_velocity_mps = Vec3(12.0f, -5.0f, 0.0f),
-                 .yaw_rad = 0.25f,
+                 // .base_velocity_mps = Vec3::Zero(),
                  .bounce_amplitude_m = 0.0010f,
-                 .bounce_frequency_hz = 70.0f,
+                 .bounce_frequency_hz = 1000.0f,
                  .bounce_phase_rad = 0.8f,
-                 .reflectivity = std::polar(0.95f, 1.9f),
+                 .reflectivity = std::polar(1.0f, 1.9f),
              },
              CarSettings{
-                 .initial_position_m = Vec3(168.0f, 84.0f, 138.0f),
+                 .initial_position_m = Vec3(-108.0f, 84.0f, 138.0f),
                  .base_velocity_mps = Vec3(24.0f, 13.0f, 0.0f),
-                 .yaw_rad = 0.3f,
-                 .bounce_amplitude_m = 0.002f,
-                 .bounce_frequency_hz = 15.0f,
-                 .bounce_phase_rad = 1.1f,
-                 .reflectivity = std::polar(0.9f, 0.4f),
+                 // .base_velocity_mps = Vec3::Zero(),
+                 .bounce_amplitude_m = 0.0010f,
+                 .bounce_frequency_hz = 1700.0f,
+                 .bounce_phase_rad = 0.0f,
+                 .reflectivity = std::polar(1.0f, 0.4f),
              }}};
 
 } // namespace problem

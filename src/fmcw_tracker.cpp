@@ -2,6 +2,7 @@
 
 #include "dynamics.h"
 #include "target_observation.h"
+#include "utils/HPButterworthCoeff.h"
 
 #ifndef EIGEN_FFTW_DEFAULT
 #define EIGEN_FFTW_DEFAULT
@@ -21,6 +22,7 @@ using Real = problem::Real;
 using Vec3 = problem::Vec3;
 
 constexpr Real kRangeDopplerCouplingSign = 1.0f;
+constexpr double kMicrodopplerHighPassCutoffHz = 2.0;
 
 std::size_t computeChirpCount(const problem::ProblemDescription &description) {
     const Real chirp_duration_s = static_cast<Real>(problem::RadarSettings::kRadarBlockSize) /
@@ -227,10 +229,10 @@ Real azimuthDeg(const Vec3 &direction) {
 
 Real elevationDeg(const Vec3 &direction) {
     const Real r = direction.norm();
-    if (r < 1.0e-6f) {
-        return 0.0f;
+    if (r < Real(1.0e-6)) {
+        return Real(0.0);
     }
-    return degrees(std::asin(std::clamp(direction.z() / r, -1.0f, 1.0f)));
+    return degrees(std::asin(std::clamp(direction.z() / r, Real(-1.0), Real(1.0))));
 }
 
 Real wrapAngleDeg(Real angle_deg) {
@@ -249,7 +251,7 @@ Real angleDifferenceDeg(Real lhs_deg, Real rhs_deg) {
 
 Vec3 normalizedOr(const Vec3 &value, const Vec3 &fallback) {
     const Real norm = value.norm();
-    if (norm < 1.0e-6f) {
+    if (norm < Real(1.0e-6)) {
         return fallback;
     }
     return value / norm;
@@ -338,14 +340,18 @@ struct SegmentBounds {
     std::size_t end;
 };
 
-double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &batch_results,
-                                              double chirp_duration_s,
-                                              std::vector<double> *times_s_out = nullptr,
-                                              std::vector<double> *unwrapped_phase_out = nullptr,
-                                              std::vector<double> *residual_phase_out = nullptr) {
-    constexpr double kMinSearchFrequencyHz = 10.0f;
-    constexpr double kMaxSearchFrequencyHz = 100.0f;
-    constexpr std::size_t kBoundaryFitSamples = 8U;
+double
+estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &batch_results,
+                                       double chirp_duration_s,
+                                       std::vector<double> *times_s_out = nullptr,
+                                       std::vector<double> *residual_doppler_hz_out = nullptr,
+                                       std::vector<double> *filtered_doppler_hz_out = nullptr,
+                                       std::vector<double> *candidate_frequency_hz_out = nullptr,
+                                       std::vector<double> *candidate_power_out = nullptr,
+                                       double *peak_power_out = nullptr) {
+    constexpr double kMinSearchFrequencyHz = 300.0;
+    constexpr double kMaxSearchFrequencyHz = 2000.0;
+    constexpr double kHighPassCutoffHz = 250.0;
 
     if (chirp_duration_s <= 0.0f) {
         return 0.0f;
@@ -404,9 +410,8 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
             times_s.push_back(chirp_time_s);
 
             const double raw_phase = batch.slow_time_phase_rad[chirp];
-            const double local_time_s = static_cast<double>(chirp) * chirp_duration_s;
             const double coarse_phase =
-                2.0 * problem::Constants::kPi * batch.doppler_hz * local_time_s;
+                2.0 * problem::Constants::kPi * batch.doppler_hz * chirp_time_s;
             const std::complex<double> baseband =
                 std::polar(1.0, raw_phase) * std::polar(1.0, -coarse_phase);
             wrapped_phase_rad.push_back(std::arg(baseband));
@@ -425,34 +430,38 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
         if (times_s_out != nullptr) {
             times_s_out->assign(times_s.begin(), times_s.end());
         }
-        if (unwrapped_phase_out != nullptr) {
-            *unwrapped_phase_out = {};
+        if (residual_doppler_hz_out != nullptr) {
+            *residual_doppler_hz_out = {};
         }
-        if (residual_phase_out != nullptr) {
-            *residual_phase_out = {};
+        if (filtered_doppler_hz_out != nullptr) {
+            *filtered_doppler_hz_out = {};
         }
         return 0.0f;
     }
 
-    std::vector<double> filtered_phase_all;
-    std::vector<double> unwrapped_phase_all;
-    filtered_phase_all.reserve(wrapped_phase_rad.size());
-    unwrapped_phase_all.reserve(wrapped_phase_rad.size());
+    std::vector<double> residual_doppler_all;
+    std::vector<double> filtered_doppler_all;
+    residual_doppler_all.reserve(wrapped_phase_rad.size());
+    filtered_doppler_all.reserve(wrapped_phase_rad.size());
 
     std::size_t max_segment_length = 0U;
     for (const SegmentBounds &segment : continuous_segments) {
-        max_segment_length = std::max(max_segment_length, segment.end - segment.begin);
+        if (segment.end > segment.begin + 1U) {
+            max_segment_length = std::max(max_segment_length, segment.end - segment.begin - 1U);
+        }
     }
 
     if (max_segment_length < 4U) {
         if (times_s_out != nullptr) {
             times_s_out->assign(times_s.begin(), times_s.end());
         }
-        if (unwrapped_phase_out != nullptr) {
-            unwrapped_phase_out->assign(unwrapped_phase_all.begin(), unwrapped_phase_all.end());
+        if (residual_doppler_hz_out != nullptr) {
+            residual_doppler_hz_out->assign(residual_doppler_all.begin(),
+                                            residual_doppler_all.end());
         }
-        if (residual_phase_out != nullptr) {
-            residual_phase_out->assign(filtered_phase_all.begin(), filtered_phase_all.end());
+        if (filtered_doppler_hz_out != nullptr) {
+            filtered_doppler_hz_out->assign(filtered_doppler_all.begin(),
+                                            filtered_doppler_all.end());
         }
         return 0.0f;
     }
@@ -470,6 +479,9 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
 
     for (const SegmentBounds &segment : continuous_segments) {
         const std::size_t length = segment.end - segment.begin;
+        if (length < 2U) {
+            continue;
+        }
         std::vector<double> segment_wrapped(wrapped_phase_rad.begin() + segment.begin,
                                             wrapped_phase_rad.begin() + segment.end);
         std::vector<double> segment_unwrapped(length);
@@ -485,36 +497,39 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
             segment_unwrapped[i] = segment_wrapped[i] + cumulative_jump;
         }
 
-        std::vector<double> segment_filtered = segment_unwrapped;
-        if (length > kBoundaryFitSamples * 2U) {
-            double sum_x = 0.0, sum_y = 0.0, sum_xx = 0.0, sum_xy = 0.0;
-            for (std::size_t i = 0; i < length; ++i) {
-                const double t = times_s[segment.begin + i] - times_s[segment.begin];
-                sum_x += t;
-                sum_y += segment_unwrapped[i];
-                sum_xx += t * t;
-                sum_xy += t * segment_unwrapped[i];
-            }
-            const double det = static_cast<double>(length) * sum_xx - sum_x * sum_x;
-            const double slope = (static_cast<double>(length) * sum_xy - sum_x * sum_y) / det;
-            const double intercept = (sum_y - slope * sum_x) / static_cast<double>(length);
-            for (std::size_t i = 0; i < length; ++i) {
-                const double t = times_s[segment.begin + i] - times_s[segment.begin];
-                segment_filtered[i] -= (intercept + slope * t);
-            }
+        std::vector<double> segment_residual_doppler(length - 1U, 0.0);
+        std::vector<double> segment_times(length - 1U, 0.0);
+        for (std::size_t i = 1; i < length; ++i) {
+            const double phase_delta = segment_unwrapped[i] - segment_unwrapped[i - 1U];
+            segment_residual_doppler[i - 1U] =
+                phase_delta / (2.0 * problem::Constants::kPi * chirp_duration_s);
+            segment_times[i - 1U] = times_s[segment.begin + i];
         }
 
-        unwrapped_phase_all.insert(unwrapped_phase_all.end(),
-                                   segment_unwrapped.begin(),
-                                   segment_unwrapped.end());
-        filtered_phase_all.insert(filtered_phase_all.end(),
-                                  segment_filtered.begin(),
-                                  segment_filtered.end());
+        const double sample_rate_hz = 1.0 / chirp_duration_s;
+        HPButterworthCoeff high_pass_coeffs(kHighPassCutoffHz, sample_rate_hz);
+        IIRFilter high_pass_filter(high_pass_coeffs.getCoefficients());
+        const std::size_t warmup_samples = std::clamp<std::size_t>(
+            static_cast<std::size_t>(std::ceil(sample_rate_hz / kHighPassCutoffHz)), 8U, 512U);
+        for (std::size_t i = 0; i < warmup_samples; ++i) {
+            high_pass_filter.filterSample(segment_residual_doppler.front());
+        }
+        std::vector<double> segment_filtered_doppler = segment_residual_doppler;
+        for (double &sample : segment_filtered_doppler) {
+            sample = high_pass_filter.filterSample(sample);
+        }
+
+        residual_doppler_all.insert(residual_doppler_all.end(),
+                                    segment_residual_doppler.begin(),
+                                    segment_residual_doppler.end());
+        filtered_doppler_all.insert(filtered_doppler_all.end(),
+                                    segment_filtered_doppler.begin(),
+                                    segment_filtered_doppler.end());
 
         std::fill(fft_input.begin(), fft_input.end(), std::complex<double>(0.0, 0.0));
-        const std::vector<Real> win = hannWindow(length);
-        for (std::size_t i = 0; i < length; ++i) {
-            fft_input[i] = segment_filtered[i] * win[i];
+        const std::vector<Real> win = hannWindow(segment_filtered_doppler.size());
+        for (std::size_t i = 0; i < segment_filtered_doppler.size(); ++i) {
+            fft_input[i] = segment_filtered_doppler[i] * win[i];
         }
         fft.fwd(fft_output, fft_input);
         for (std::size_t i = 0; i < nfft / 2U; ++i) {
@@ -523,13 +538,20 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
     }
 
     if (times_s_out != nullptr) {
-        times_s_out->assign(times_s.begin(), times_s.end());
+        times_s_out->clear();
+        times_s_out->reserve(filtered_doppler_all.size());
+        for (const SegmentBounds &segment : continuous_segments) {
+            const std::size_t length = segment.end - segment.begin;
+            for (std::size_t i = 1; i < length; ++i) {
+                times_s_out->push_back(times_s[segment.begin + i]);
+            }
+        }
     }
-    if (unwrapped_phase_out != nullptr) {
-        *unwrapped_phase_out = unwrapped_phase_all;
+    if (residual_doppler_hz_out != nullptr) {
+        *residual_doppler_hz_out = residual_doppler_all;
     }
-    if (residual_phase_out != nullptr) {
-        *residual_phase_out = filtered_phase_all;
+    if (filtered_doppler_hz_out != nullptr) {
+        *filtered_doppler_hz_out = filtered_doppler_all;
     }
 
     double best_power = -1.0;
@@ -540,20 +562,29 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
     for (std::size_t i = static_cast<std::size_t>(std::max(1.0, std::floor(min_bin)));
          i < std::min<std::size_t>(nfft / 2U, static_cast<std::size_t>(std::ceil(max_bin)));
          ++i) {
-        if (accumulated_power[i] > best_power) {
-            best_power = accumulated_power[i];
+        const double power = accumulated_power[i];
+        if (candidate_frequency_hz_out != nullptr) {
+            candidate_frequency_hz_out->push_back(static_cast<double>(i) /
+                                                  (static_cast<double>(nfft) * chirp_duration_s));
+        }
+        if (candidate_power_out != nullptr) {
+            candidate_power_out->push_back(power);
+        }
+        if (power > best_power) {
+            best_power = power;
             best_bin = i;
         }
     }
 
     double best_frequency_hz = 0.0;
     if (best_power > 0.0) {
-        best_frequency_hz = static_cast<double>(best_bin) / (static_cast<double>(nfft) * chirp_duration_s);
+        best_frequency_hz =
+            static_cast<double>(best_bin) / (static_cast<double>(nfft) * chirp_duration_s);
         if (best_bin > 0U && best_bin + 1U < nfft / 2U) {
-            const PeakInterpResult interp = quadraticPeakOffsetChecked(
-                static_cast<Real>(accumulated_power[best_bin - 1]),
-                static_cast<Real>(accumulated_power[best_bin]),
-                static_cast<Real>(accumulated_power[best_bin + 1]));
+            const PeakInterpResult interp =
+                quadraticPeakOffsetChecked(static_cast<Real>(accumulated_power[best_bin - 1]),
+                                           static_cast<Real>(accumulated_power[best_bin]),
+                                           static_cast<Real>(accumulated_power[best_bin + 1]));
             if (interp.valid) {
                 best_frequency_hz = (static_cast<double>(best_bin) + interp.delta) /
                                     (static_cast<double>(nfft) * chirp_duration_s);
@@ -561,29 +592,44 @@ double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &ba
         }
     }
 
+    if (peak_power_out != nullptr) {
+        *peak_power_out = best_power;
+    }
+
     return best_frequency_hz;
 }
 
-double estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &batch_results,
-                                               double batch_period_s,
-                                               std::vector<double> *candidate_frequency_hz_out = nullptr,
-                                               std::vector<double> *candidate_power_out = nullptr,
-                                               double *peak_power_out = nullptr,
-                                               std::size_t *valid_cpi_count_out = nullptr) {
+double
+estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &batch_results,
+                                        double batch_period_s,
+                                        const RadarConfig &radar_config,
+                                        std::vector<double> *candidate_frequency_hz_out = nullptr,
+                                        std::vector<double> *candidate_power_out = nullptr,
+                                        double *peak_power_out = nullptr,
+                                        std::size_t *valid_cpi_count_out = nullptr) {
     if (batch_results.empty() || batch_period_s <= 0.0) {
         return 0.0;
     }
+    (void)radar_config;
 
-    std::vector<std::complex<double>> slow_time;
-    slow_time.reserve(batch_results.size());
+    std::vector<double> filtered_doppler_hz;
+    filtered_doppler_hz.reserve(batch_results.size());
+
     std::size_t valid_count = 0;
-    for (const auto &batch : batch_results) {
+    double held_doppler_hz = 0.0;
+    bool have_held_sample = false;
+
+    const double sample_rate_hz = 1.0 / batch_period_s;
+    HPButterworthCoeff high_pass_coeffs(kMicrodopplerHighPassCutoffHz, sample_rate_hz);
+    IIRFilter high_pass_filter(high_pass_coeffs.getCoefficients());
+
+    for (const BatchResult &batch : batch_results) {
         if (batch.valid) {
-            slow_time.push_back(std::polar(1.0, static_cast<double>(batch.phase_rad)));
+            held_doppler_hz = static_cast<double>(batch.measured_doppler_hz);
+            have_held_sample = true;
             ++valid_count;
-        } else {
-            slow_time.push_back(std::complex<double>(0.0, 0.0));
         }
+        filtered_doppler_hz.push_back(have_held_sample ? held_doppler_hz : 0.0);
     }
 
     if (valid_cpi_count_out != nullptr) {
@@ -594,16 +640,31 @@ double estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &b
         return 0.0;
     }
 
+    if (have_held_sample) {
+        const std::size_t warmup_samples = std::clamp<std::size_t>(
+            static_cast<std::size_t>(std::ceil(sample_rate_hz / kMicrodopplerHighPassCutoffHz)),
+            8U,
+            512U);
+        for (std::size_t i = 0; i < warmup_samples; ++i) {
+            high_pass_filter.filterSample(filtered_doppler_hz.front());
+        }
+    }
+
+    for (double &sample : filtered_doppler_hz) {
+        sample = high_pass_filter.filterSample(sample);
+    }
+
     std::size_t nfft = 1U;
-    while (nfft < slow_time.size()) {
+    while (nfft < filtered_doppler_hz.size()) {
         nfft <<= 1U;
     }
     nfft <<= 3U;
 
     std::vector<std::complex<double>> fft_input(nfft, std::complex<double>(0.0, 0.0));
-    const std::vector<Real> win = hannWindow(slow_time.size());
-    for (std::size_t i = 0; i < slow_time.size(); ++i) {
-        fft_input[i] = slow_time[i] * static_cast<double>(win[i]);
+    const std::vector<Real> win = hannWindow(filtered_doppler_hz.size());
+    for (std::size_t i = 0; i < filtered_doppler_hz.size(); ++i) {
+        fft_input[i] =
+            std::complex<double>(filtered_doppler_hz[i] * static_cast<double>(win[i]), 0.0);
     }
 
     Eigen::FFT<double> fft;
@@ -617,10 +678,10 @@ double estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &b
 
     constexpr double kMinFreqHz = 5.0;
     constexpr double kMaxFreqHz = 100.0;
-    const std::size_t min_bin =
-        static_cast<std::size_t>(std::floor(kMinFreqHz * static_cast<double>(nfft) * batch_period_s));
-    const std::size_t max_bin =
-        static_cast<std::size_t>(std::ceil(kMaxFreqHz * static_cast<double>(nfft) * batch_period_s));
+    const std::size_t min_bin = static_cast<std::size_t>(
+        std::floor(kMinFreqHz * static_cast<double>(nfft) * batch_period_s));
+    const std::size_t max_bin = static_cast<std::size_t>(
+        std::ceil(kMaxFreqHz * static_cast<double>(nfft) * batch_period_s));
 
     double best_power = -1.0;
     std::size_t best_bin = 0U;
@@ -629,7 +690,8 @@ double estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &b
          i < std::min<std::size_t>(nfft / 2U, max_bin);
          ++i) {
         const double p = accumulated_power[i];
-        candidates.push_back({static_cast<double>(i) / (static_cast<double>(nfft) * batch_period_s), p});
+        candidates.push_back(
+            {static_cast<double>(i) / (static_cast<double>(nfft) * batch_period_s), p});
         if (p > best_power) {
             best_power = p;
             best_bin = i;
@@ -637,14 +699,18 @@ double estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &b
     }
 
     double best_frequency_hz = 0.0;
-    if (best_bin > 0U && best_bin + 1U < accumulated_power.size()) {
-        const PeakInterpResult interp =
-            quadraticPeakOffsetChecked(static_cast<Real>(accumulated_power[best_bin - 1U]),
-                                       static_cast<Real>(accumulated_power[best_bin]),
-                                       static_cast<Real>(accumulated_power[best_bin + 1U]));
-        if (interp.valid) {
-            best_frequency_hz = (static_cast<double>(best_bin) + interp.delta) /
-                                (static_cast<double>(nfft) * batch_period_s);
+    if (best_power > 0.0) {
+        best_frequency_hz =
+            static_cast<double>(best_bin) / (static_cast<double>(nfft) * batch_period_s);
+        if (best_bin > 0U && best_bin + 1U < accumulated_power.size()) {
+            const PeakInterpResult interp =
+                quadraticPeakOffsetChecked(static_cast<Real>(accumulated_power[best_bin - 1U]),
+                                           static_cast<Real>(accumulated_power[best_bin]),
+                                           static_cast<Real>(accumulated_power[best_bin + 1U]));
+            if (interp.valid) {
+                best_frequency_hz = (static_cast<double>(best_bin) + interp.delta) /
+                                    (static_cast<double>(nfft) * batch_period_s);
+            }
         }
     }
 
@@ -956,16 +1022,16 @@ detail::SceneObservation StreamingTracker::processCurrentWindow(std::size_t star
                 return lhs.power < rhs.power;
             });
         for (std::size_t rx = 0; rx < num_rx; ++rx) {
-            snapshots(rx, i) = rd_cube[cubeIndex(peak_it->doppler_bin, peak_it->range_bin, rx, range_count, num_rx)];
+            snapshots(rx, i) = rd_cube[cubeIndex(
+                peak_it->doppler_bin, peak_it->range_bin, rx, range_count, num_rx)];
         }
     }
 
     // 2. Batched beamforming across all directions and all clusters.
     Eigen::Map<const Eigen::Matrix<Complex, Eigen::Dynamic, kNumRx, Eigen::RowMajor>>
         steering_matrix(steering_conj_.data(), directions_.size(), kNumRx);
-    
-    Eigen::Matrix<Complex, Eigen::Dynamic, Eigen::Dynamic> responses = 
-        steering_matrix * snapshots;
+
+    Eigen::Matrix<Complex, Eigen::Dynamic, Eigen::Dynamic> responses = steering_matrix * snapshots;
 
     // 3. Process each cluster to form measurement candidates.
     for (std::size_t cluster_index = 0; cluster_index < cluster_count; ++cluster_index) {
@@ -1082,7 +1148,8 @@ StreamingTracker::estimateTopAoAs(std::span<const Complex> snapshot, std::size_t
             response += steering_conj_[base + rx] * snapshot[rx];
         }
         const Real score = std::norm(response);
-        peaks.push_back({direction_azimuth_deg_[i], direction_elevation_deg_[i], score, directions_[i]});
+        peaks.push_back(
+            {direction_azimuth_deg_[i], direction_elevation_deg_[i], score, directions_[i]});
     }
 
     std::sort(peaks.begin(), peaks.end(), [](const AoAPeak &a, const AoAPeak &b) {
@@ -1108,20 +1175,21 @@ Complex StreamingTracker::computeRangeFftBin(std::span<const Complex> dechirped_
 
     const std::size_t num_rx = radar_config_.numRx();
     const std::size_t nfft = range_fft_input_.size();
-    
+
     // This is a bit inefficient for a single bin, but ensures consistency with processCurrentWindow
     std::vector<Complex> fft_input(nfft, Complex(0.0f, 0.0f));
-    for (std::size_t sample = range_wrap_guard_samples_; sample < radar_config_.block_size; ++sample) {
+    for (std::size_t sample = range_wrap_guard_samples_; sample < radar_config_.block_size;
+         ++sample) {
         fft_input[sample] = dechirped_chirp[sample * num_rx + rx] * range_window_[sample];
     }
-    
+
     // We use a local FFT to avoid mutating member scratchpads in a const method if possible,
-    // but StreamingTracker has an Eigen::FFT member. Since this is for offline analysis, 
+    // but StreamingTracker has an Eigen::FFT member. Since this is for offline analysis,
     // we'll just do it simply.
     Eigen::FFT<Real> fft;
     std::vector<Complex> fft_output;
     fft.fwd(fft_output, fft_input);
-    
+
     return fft_output[static_cast<std::size_t>(range_indices_[range_bin])];
 }
 

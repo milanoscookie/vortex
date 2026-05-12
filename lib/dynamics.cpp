@@ -24,3 +24,11 @@ CarDynamics::Vec3 CarDynamics::velocityAt(problem::Real t_s) const noexcept {
                     car_.bounce_amplitude_m * std::cos(bouncePhaseRadians(car_, t_s));
     return velocity;
 }
+
+problem::Real CarDynamics::yawAt(problem::Real t_s) const noexcept {
+    const Vec3 velocity = velocityAt(t_s);
+    if (std::abs(velocity.x()) <= 1.0e-6f && std::abs(velocity.y()) <= 1.0e-6f) {
+        return 0.0f;
+    }
+    return std::atan2(velocity.y(), velocity.x());
+}

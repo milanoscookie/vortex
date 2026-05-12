@@ -6,15 +6,15 @@
 // 2nd Order IIR Filter
 class IIRFilter {
   public:
-    using Block = Eigen::Matrix<float, dsp::BLOCK_SIZE, 1>;
-    using FilterCoeff = Eigen::Matrix<float, 5, 1>; // [b0, b1, b2, a1, a2]
+    using Block = Eigen::Matrix<double, dsp::BLOCK_SIZE, 1>;
+    using FilterCoeff = Eigen::Matrix<double, 5, 1>; // [b0, b1, b2, a1, a2]
 
     IIRFilter() : coeffs_(identityCoeffs()) {}
     IIRFilter(const FilterCoeff &coeffs) : coeffs_(coeffs) {}
 
     static FilterCoeff identityCoeffs() {
         FilterCoeff coeffs;
-        coeffs << 1.0f, 0.0f, 0.0f, 0.0f, 0.0f;
+        coeffs << 1.0, 0.0, 0.0, 0.0, 0.0;
         return coeffs;
     }
 
@@ -25,9 +25,9 @@ class IIRFilter {
         return coeffs_;
     }
 
-    inline float filterSample(float input) {
-        const float output = coeffs_[0] * input + coeffs_[1] * x1_ + coeffs_[2] * x2_ -
-                             coeffs_[3] * y1_ - coeffs_[4] * y2_;
+    inline double filterSample(double input) {
+        const double output = coeffs_[0] * input + coeffs_[1] * x1_ + coeffs_[2] * x2_ -
+                              coeffs_[3] * y1_ - coeffs_[4] * y2_;
 
         x2_ = x1_;
         x1_ = input;
@@ -47,10 +47,10 @@ class IIRFilter {
   private:
     FilterCoeff coeffs_ = identityCoeffs();
 
-    float x1_ = 0.0f;
-    float x2_ = 0.0f;
-    float y1_ = 0.0f;
-    float y2_ = 0.0f;
+    double x1_ = 0.0;
+    double x2_ = 0.0;
+    double y1_ = 0.0;
+    double y2_ = 0.0;
 
     Block out_ = Block::Zero();
 };

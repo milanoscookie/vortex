@@ -32,6 +32,7 @@ class RadarSimulator {
     using RadarSettings = problem::RadarSettings;
     using FloorplaneClutterSettings = problem::FloorplaneClutterSettings;
     using SimulationMetrics = problem::SimulationMetrics;
+    using SimulatorSettings = problem::SimulatorSettings;
     using ProblemDescription = problem::ProblemDescription;
     using Constants = problem::Constants;
     using ProbeSettings = problem::ProbeSettings;
@@ -90,6 +91,7 @@ class RadarSimulator {
     const std::vector<SimulationMetrics> &lastMetricsPerTarget() const noexcept {
         return last_metrics_;
     }
+    bool isGuessLocationWithinPredictedCar(const Vec3 &guesslocation) const noexcept;
 
   private:
     template <size_t NumX, size_t NumY>
@@ -101,6 +103,7 @@ class RadarSimulator {
                            const radar::TargetObservation &observation) const noexcept;
     static std::vector<CarDynamics> makeDynamics(const CarList &car_settings);
     RadarSettings radar_settings_;
+    SimulatorSettings simulator_settings_;
     std::vector<CarDynamics> dynamics_;
     Environment environment_;
     radar::TxHistoryBuffer<Complex, kTxHistorySize> tx_history_;
@@ -166,13 +169,14 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
 
     for (int element_index = 0; element_index < static_cast<int>(element_count); ++element_index) {
         const problem::Real weight = probe_state.element_weight(element_index);
-        if (weight == 0.0f) {
-            output(element_index) = Complex(0.0f, 0.0f);
+        if (weight == problem::Real(0.0)) {
+            output(element_index) = Complex(0.0, 0.0);
             continue;
         }
 
-        const auto element_position =
-            probe_state.element_positions_m.col(static_cast<Eigen::Index>(element_index));
+        const Vec3 element_position =
+            probe_state.element_positions_m.col(static_cast<Eigen::Index>(element_index))
+                .template cast<Vec3::Scalar>();
         const problem::Real element_delay_samples =
             probe_state.element_delay_samples(element_index);
 
@@ -189,7 +193,9 @@ void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
                                                   sample_index_);
         }
     }
-
+    // simulation.cpp (inside RadarSimulator::step)
     ++sample_index_;
-    time_s_ += sampleIntervalSeconds();
+    time_s_ = static_cast<problem::Real>(sample_index_) * sampleIntervalSeconds();
+    // ++sample_index_;
+    // time_s_ += sampleIntervalSeconds();
 }

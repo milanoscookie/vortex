@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsp_config.h"
+#include <bit>
 #include <Eigen/Dense>
 #ifndef EIGEN_FFTW_DEFAULT
 #define EIGEN_FFTW_DEFAULT
@@ -10,16 +11,17 @@
 // Fast convolution using overlap-add FFT method
 template <int IR_SIZE> class FastLinearSystem {
   public:
-    using Block = Eigen::Matrix<float, dsp::BLOCK_SIZE, 1>;
-    using IRBlock = Eigen::Matrix<float, IR_SIZE, 1>;
+    using Block = Eigen::Matrix<double, dsp::BLOCK_SIZE, 1>;
+    using IRBlock = Eigen::Matrix<double, IR_SIZE, 1>;
 
-    // FFT size must be >= BLOCK_SIZE + IR_SIZE - 1 for linear convolution
-    static constexpr int FFT_SIZE = 2048;            // Next power of 2 after 256+1024-1=1279
-    static constexpr int OVERLAP_SIZE = IR_SIZE - 1; // 1023 samples
+    // FFT size must be >= BLOCK_SIZE + IR_SIZE - 1 for linear convolution.
+    static constexpr int FFT_SIZE =
+        static_cast<int>(std::bit_ceil(static_cast<unsigned>(dsp::BLOCK_SIZE + IR_SIZE - 1)));
+    static constexpr int OVERLAP_SIZE = IR_SIZE - 1;
 
-    using FFTBlock = Eigen::Matrix<std::complex<float>, FFT_SIZE, 1>;
-    using RealFFTBlock = Eigen::Matrix<float, FFT_SIZE, 1>;
-    using OverlapBuffer = Eigen::Matrix<float, OVERLAP_SIZE, 1>;
+    using FFTBlock = Eigen::Matrix<std::complex<double>, FFT_SIZE, 1>;
+    using RealFFTBlock = Eigen::Matrix<double, FFT_SIZE, 1>;
+    using OverlapBuffer = Eigen::Matrix<double, OVERLAP_SIZE, 1>;
 
     FastLinearSystem() {
         H_fft_.setZero();
@@ -82,5 +84,5 @@ template <int IR_SIZE> class FastLinearSystem {
     FFTBlock H_fft_;
     OverlapBuffer overlap_ = OverlapBuffer::Zero();
 
-    Eigen::FFT<float> fft_;
+    Eigen::FFT<double> fft_;
 };

@@ -16,6 +16,7 @@ class CarDynamics {
 
     Vec3 positionAt(problem::Real t_s) const noexcept;
     Vec3 velocityAt(problem::Real t_s) const noexcept;
+    problem::Real yawAt(problem::Real t_s) const noexcept;
 
   private:
     CarSettings car_;

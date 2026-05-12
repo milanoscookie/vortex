@@ -37,6 +37,10 @@ struct TrackState {
     Vec3 position_m = Vec3::Zero();
     Vec3 velocity_mps = Vec3::Zero();
     Vec3 direction = Vec3::UnitX();
+    Real azimuth_deg = 0.0f;
+    Real elevation_deg = 0.0f;
+    Real azimuth_rate_degps = 0.0f;
+    Real elevation_rate_degps = 0.0f;
     std::size_t hit_count = 0;
     std::size_t miss_count = 0;
     std::vector<std::uint8_t> recent_matches;
@@ -113,10 +117,14 @@ std::vector<double> gradient(const std::vector<double> &values, const std::vecto
 double estimateDominantCpiResidualFrequencyHz(const std::vector<BatchResult> &batch_results,
                                               double chirp_duration_s,
                                               std::vector<double> *times_s_out,
-                                              std::vector<double> *unwrapped_phase_out,
-                                              std::vector<double> *residual_phase_out);
+                                              std::vector<double> *residual_doppler_hz_out,
+                                              std::vector<double> *filtered_doppler_hz_out,
+                                              std::vector<double> *candidate_frequency_hz_out,
+                                              std::vector<double> *candidate_power_out,
+                                              double *peak_power_out);
 double estimateDominantBatchDopplerFrequencyHz(const std::vector<BatchResult> &batch_results,
                                                double batch_period_s,
+                                               const RadarConfig &radar_config,
                                                std::vector<double> *candidate_frequency_hz_out,
                                                std::vector<double> *candidate_power_out,
                                                double *peak_power_out,
@@ -127,9 +135,9 @@ Real measurementAzimuthDeg(const MeasurementCandidate &measurement);
 Real measurementElevationDeg(const MeasurementCandidate &measurement);
 
 std::vector<DetectionCell> detectLocalPeakCells(const std::vector<Real> &rd_power,
-                                               std::size_t range_count,
-                                               std::size_t nfft_doppler,
-                                               const DetectionConfig &config);
+                                                std::size_t range_count,
+                                                std::size_t nfft_doppler,
+                                                const DetectionConfig &config);
 std::vector<std::vector<DetectionCell>>
 clusterNearbyPeaks(const std::vector<DetectionCell> &detections, const DetectionConfig &config);
 Real computeAssociationDistanceSq(const RadarConfig &radar_config,

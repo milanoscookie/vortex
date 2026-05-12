@@ -6,7 +6,7 @@
 
 namespace coords {
 
-using Coords = Eigen::Vector3f;
+using Coords = Eigen::Vector3d;
 
 // Euclidean distance between two 3D points
 inline problem::Real distanceTo(const Coords &a, const Coords &b) {

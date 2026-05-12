@@ -9,6 +9,79 @@
 
 namespace fmcw_tracker {
 
+namespace {
+
+double trackTruthAssociationCost(const problem::ProblemDescription &description,
+                                 const TrackHistory &history,
+                                 std::size_t car_index) {
+    if (car_index >= description.cars.size()) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    double position_error_sum_m = 0.0;
+    std::size_t position_error_count = 0U;
+    for (const TrackReport &report : history.reports) {
+        if (!report.valid) {
+            continue;
+        }
+        const problem::SimulationMetrics truth = truthAtTime(description, report.time_s, car_index);
+        position_error_sum_m += static_cast<double>((report.position_m - truth.position_m).norm());
+        ++position_error_count;
+    }
+
+    if (position_error_count == 0U) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    const double mean_position_error_m =
+        position_error_sum_m / static_cast<double>(position_error_count);
+    const double truth_frequency_hz = description.cars[car_index].bounce_frequency_hz;
+    const double frequency_error_hz =
+        std::abs(history.microdoppler_frequency_hz - truth_frequency_hz);
+
+    return mean_position_error_m + 2.0 * frequency_error_hz;
+}
+
+void assignTruthCarsOneToOne(const problem::ProblemDescription &description,
+                             std::vector<TrackHistory> &histories) {
+    if (description.cars.empty() || histories.empty()) {
+        return;
+    }
+
+    std::vector<std::vector<Real>> cost_matrix(
+        histories.size(),
+        std::vector<Real>(description.cars.size(), std::numeric_limits<Real>::infinity()));
+    for (std::size_t history_index = 0; history_index < histories.size(); ++history_index) {
+        for (std::size_t car_index = 0; car_index < description.cars.size(); ++car_index) {
+            cost_matrix[history_index][car_index] = static_cast<Real>(
+                trackTruthAssociationCost(description, histories[history_index], car_index));
+        }
+    }
+
+    const detail::AssignmentSolution assignment =
+        detail::solveAssignments(cost_matrix, std::numeric_limits<Real>::max() / 4.0);
+
+    for (std::size_t history_index = 0; history_index < histories.size(); ++history_index) {
+        TrackHistory &history = histories[history_index];
+        history.matched_truth_car_index = static_cast<std::size_t>(-1);
+        history.microdoppler_truth_frequency_hz = 0.0;
+        history.microdoppler_frequency_error_hz = 0.0;
+
+        const int assigned_car = assignment.measurement_for_track[history_index];
+        if (assigned_car < 0) {
+            continue;
+        }
+
+        history.matched_truth_car_index = static_cast<std::size_t>(assigned_car);
+        history.microdoppler_truth_frequency_hz =
+            description.cars[history.matched_truth_car_index].bounce_frequency_hz;
+        history.microdoppler_frequency_error_hz =
+            std::abs(history.microdoppler_frequency_hz - history.microdoppler_truth_frequency_hz);
+    }
+}
+
+} // namespace
+
 TrackSummary StreamingTracker::buildSummary() const {
     TrackSummary summary;
     summary.batch_results.reserve(scene_batch_results_.size());
@@ -65,11 +138,16 @@ TrackSummary StreamingTracker::buildSummary() const {
             }
         }
         if (best_track != nullptr) {
-            batch.valid = best_track->valid;
+            batch.valid = best_track->valid && best_track->matched;
             batch.range_m = best_track->range_m;
-            batch.doppler_hz = best_track->doppler_hz;
+            // With the instantaneous raw measurement:
+            batch.doppler_hz = detail::interpolateAxis(
+                doppler_axis_hz_, best_track->doppler_bin, best_track->doppler_bin_offset);
+            batch.measured_doppler_hz = batch.doppler_hz;
+
             batch.predicted_range_m = best_track->predicted_range_m;
             batch.predicted_doppler_hz = best_track->predicted_doppler_hz;
+            batch.velocity_mps = best_track->velocity_mps;
             batch.direction = best_track->direction;
             batch.predicted_direction = best_track->direction;
             batch.phase_rad = best_track->phase_rad;
@@ -116,33 +194,23 @@ TrackSummary StreamingTracker::buildSummary() const {
         summary.truth_metrics.push_back(truthAtTime(description_, batch.time_s, matched_car_index));
     }
 
-    /*
-    std::vector<double> microdoppler_times_s;
-    std::vector<double> microdoppler_unwrapped_phase;
-    std::vector<double> residual_phase_example;
     std::vector<double> microdoppler_candidate_frequency_hz;
     std::vector<double> microdoppler_candidate_power;
-    const double phase_microdoppler_frequency_hz = detail::estimateDominantCpiResidualFrequencyHz(
+    summary.microdoppler_valid_cpi_count = static_cast<std::size_t>(std::count_if(
+        summary.batch_results.begin(), summary.batch_results.end(), [](const BatchResult &batch) {
+            return batch.valid;
+        }));
+    summary.microdoppler_phase_frequency_hz = detail::estimateDominantCpiResidualFrequencyHz(
         summary.batch_results,
         static_cast<double>(radar_config_.chirp_duration_s),
-        &microdoppler_times_s,
-        &microdoppler_unwrapped_phase,
-        &residual_phase_example);
-    summary.microdoppler_phase_frequency_hz = detail::estimateDominantBatchDopplerFrequencyHz(
-        summary.batch_results,
-        static_cast<double>(detection_config_.hop_chirps) * radar_config_.chirp_duration_s,
+        nullptr,
+        &summary.unwrapped_phase_rad,
+        &summary.detrended_phase_rad,
         &microdoppler_candidate_frequency_hz,
         &microdoppler_candidate_power,
-        &summary.microdoppler_peak_power,
-        &summary.microdoppler_valid_cpi_count);
-    if (summary.microdoppler_phase_frequency_hz <= 0.0f) {
-        summary.microdoppler_phase_frequency_hz = phase_microdoppler_frequency_hz;
-    }
-    summary.unwrapped_phase_rad = microdoppler_unwrapped_phase;
-    summary.detrended_phase_rad = residual_phase_example;
+        &summary.microdoppler_peak_power);
     summary.microdoppler_candidate_frequency_hz = microdoppler_candidate_frequency_hz;
     summary.microdoppler_candidate_power = microdoppler_candidate_power;
-    */
 
     const double microdoppler_error_hz =
         summary.microdoppler_phase_frequency_hz - summary.microdoppler_truth_frequency_hz;
@@ -198,20 +266,18 @@ SceneSummary StreamingTracker::buildSceneSummary() const {
         std::vector<BatchResult> microdoppler_batches;
         microdoppler_batches.reserve(track.history.size());
         for (const TrackReport &report : track.history) {
-            if (!report.valid || report.slow_time_phase_rad.empty() ||
-                report.doppler_slice_power.empty()) {
-                continue;
-            }
             BatchResult batch;
             batch.time_s = report.time_s;
             batch.range_m = report.range_m;
             batch.doppler_hz = report.doppler_hz;
+            batch.measured_doppler_hz = report.measured_doppler_hz;
             batch.phase_rad = report.phase_rad;
             batch.predicted_range_m = report.predicted_range_m;
             batch.predicted_doppler_hz = report.predicted_doppler_hz;
+            batch.velocity_mps = report.velocity_mps;
             batch.range_bin_offset = report.range_bin_offset;
             batch.doppler_bin_offset = report.doppler_bin_offset;
-            batch.valid = true;
+            batch.valid = report.valid && report.matched;
             batch.direction = report.direction;
             batch.predicted_direction = report.direction;
             batch.range_bin = report.range_bin;
@@ -223,25 +289,19 @@ SceneSummary StreamingTracker::buildSceneSummary() const {
             microdoppler_batches.push_back(std::move(batch));
         }
 
-        /*
-        const double phase_microdoppler_frequency_hz =
-            detail::estimateDominantCpiResidualFrequencyHz(
-                microdoppler_batches,
-                static_cast<double>(radar_config_.chirp_duration_s),
-                nullptr,
-                nullptr,
-                nullptr);
-        history.microdoppler_frequency_hz = detail::estimateDominantBatchDopplerFrequencyHz(
+        history.microdoppler_valid_cpi_count = static_cast<std::size_t>(std::count_if(
+            microdoppler_batches.begin(), microdoppler_batches.end(), [](const BatchResult &batch) {
+                return batch.valid;
+            }));
+        history.microdoppler_frequency_hz = detail::estimateDominantCpiResidualFrequencyHz(
             microdoppler_batches,
-            static_cast<double>(detection_config_.hop_chirps) * radar_config_.chirp_duration_s,
+            static_cast<double>(radar_config_.chirp_duration_s),
+            nullptr,
+            nullptr,
+            nullptr,
             &history.microdoppler_candidate_frequency_hz,
             &history.microdoppler_candidate_power,
-            &history.microdoppler_peak_power,
-            &history.microdoppler_valid_cpi_count);
-        if (history.microdoppler_frequency_hz <= 0.0) {
-            history.microdoppler_frequency_hz = phase_microdoppler_frequency_hz;
-        }
-        */
+            &history.microdoppler_peak_power);
 
         const auto valid_report_it =
             std::find_if(history.reports.rbegin(),
@@ -271,6 +331,43 @@ SceneSummary StreamingTracker::buildSceneSummary() const {
     std::sort(summary.track_histories.begin(),
               summary.track_histories.end(),
               [](const TrackHistory &lhs, const TrackHistory &rhs) { return lhs.id < rhs.id; });
+
+    assignTruthCarsOneToOne(description_, summary.track_histories);
+
+    for (const TrackHistory &history : summary.track_histories) {
+        if (history.final_status != TrackStatus::Confirmed) {
+            continue;
+        }
+
+        const auto valid_report_it =
+            std::find_if(history.reports.rbegin(),
+                         history.reports.rend(),
+                         [](const TrackReport &report) { return report.valid; });
+        if (valid_report_it == history.reports.rend()) {
+            continue;
+        }
+
+        AoAMicrodopplerSummary aoa_summary;
+        aoa_summary.azimuth_deg = detail::azimuthDeg(valid_report_it->direction);
+        aoa_summary.elevation_deg = detail::elevationDeg(valid_report_it->direction);
+        aoa_summary.microdoppler_frequency_hz = history.microdoppler_frequency_hz;
+        aoa_summary.microdoppler_truth_frequency_hz = history.microdoppler_truth_frequency_hz;
+        aoa_summary.microdoppler_frequency_error_hz = history.microdoppler_frequency_error_hz;
+        aoa_summary.microdoppler_peak_power = history.microdoppler_peak_power;
+        aoa_summary.microdoppler_valid_cpi_count = history.microdoppler_valid_cpi_count;
+        aoa_summary.matched_truth_car_index = history.matched_truth_car_index;
+        summary.blind_aoa_microdoppler_summaries.push_back(std::move(aoa_summary));
+    }
+
+    std::sort(summary.blind_aoa_microdoppler_summaries.begin(),
+              summary.blind_aoa_microdoppler_summaries.end(),
+              [](const AoAMicrodopplerSummary &lhs, const AoAMicrodopplerSummary &rhs) {
+                  return lhs.azimuth_deg < rhs.azimuth_deg;
+              });
+    for (std::size_t i = 0; i < summary.blind_aoa_microdoppler_summaries.size(); ++i) {
+        summary.blind_aoa_microdoppler_summaries[i].rank = i + 1U;
+    }
+
     return summary;
 }
 

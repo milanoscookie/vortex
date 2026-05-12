@@ -47,9 +47,9 @@ struct DetectionConfig {
     std::size_t nfft_range_min = 4096;
     bool static_clutter_suppression_enable = true;
     bool aoa_enable = true;
-    Real azimuth_min_deg = -90.0f;
-    Real azimuth_max_deg = 90.0f;
-    std::size_t azimuth_count = 181;
+    Real azimuth_min_deg = -180.0f;
+    Real azimuth_max_deg = 180.0f;
+    std::size_t azimuth_count = 361;
     Real elevation_min_deg = 0.0f;
     Real elevation_max_deg = 90.0f;
     std::size_t elevation_count = 181;
@@ -67,7 +67,7 @@ struct DetectionConfig {
     std::size_t cfar_training_range_bins = 6;
     std::size_t cfar_training_doppler_bins = 6;
     Real cfar_min_snr_db = 8.0f;
-    std::size_t max_active_tracks = 32;
+    std::size_t max_active_tracks = 3;
     std::size_t max_measurements_per_cpi = 32;
     std::size_t max_detection_cells = 256;
     std::size_t cluster_range_gate_bins = 2;
@@ -76,7 +76,7 @@ struct DetectionConfig {
     Real measurement_merge_doppler_hz = 800.0f;
     Real measurement_merge_azimuth_deg = 4.0f;
     Real measurement_merge_elevation_deg = 6.0f;
-    Real birth_min_peak_power = 2.0f;
+    Real birth_min_peak_power = 0.0f;
     Real birth_min_integrated_power = 0.0f;
     std::size_t birth_min_cluster_size = 1;
     Real track_max_range_error_m = 45.0f;
@@ -86,10 +86,12 @@ struct DetectionConfig {
     Real track_distance_gate = 45.0f;
     Real track_alpha = 0.1f;
     Real track_beta = 0.01f;
-    Real track_alpha_range = 0.10f;
-    Real track_alpha_angle = 0.02f;
-    Real track_beta_angle = 0.0001f;
-    Real track_gamma_radial = 0.02f;
+    Real track_alpha_range = 0.08f;
+    Real track_alpha_angle = 0.008f;
+    Real track_beta_angle = 0.00003f;
+    Real track_gamma_radial = 0.015f;
+    Real track_alpha_aoa = 0.12f;
+    Real track_beta_aoa = 0.01f;
     Real track_birth_distance_gate = 9.0f;
     Real deleted_track_birth_distance_gate = 9.0f;
     Real deleted_track_retention_s = 1.00f;
@@ -147,6 +149,7 @@ struct TrackReport {
     Real predicted_doppler_hz = 0.0f;
     Real range_m = 0.0f;
     Real doppler_hz = 0.0f;
+    Real measured_doppler_hz = 0.0f;
     Real radial_velocity_mps = 0.0f;
     Real phase_rad = 0.0f;
     Real range_bin_offset = 0.0f;
@@ -183,6 +186,18 @@ struct TrackHistory {
     std::vector<double> microdoppler_candidate_power;
 };
 
+struct AoAMicrodopplerSummary {
+    std::size_t rank = 0;
+    double azimuth_deg = 0.0;
+    double elevation_deg = 0.0;
+    double microdoppler_frequency_hz = 0.0;
+    double microdoppler_truth_frequency_hz = 0.0;
+    double microdoppler_frequency_error_hz = 0.0;
+    double microdoppler_peak_power = 0.0;
+    std::size_t microdoppler_valid_cpi_count = 0;
+    std::size_t matched_truth_car_index = static_cast<std::size_t>(-1);
+};
+
 struct DeletedTrackGhost {
     Real time_s = 0.0f;
     Real range_m = 0.0f;
@@ -193,6 +208,7 @@ struct DeletedTrackGhost {
 struct SceneSummary {
     std::vector<SceneBatchResult> scene_batches;
     std::vector<TrackHistory> track_histories;
+    std::vector<AoAMicrodopplerSummary> blind_aoa_microdoppler_summaries;
 };
 
 struct BatchResult {
@@ -202,9 +218,11 @@ struct BatchResult {
     Real phase_rad = 0.0f;
     Real predicted_range_m = 0.0f;
     Real predicted_doppler_hz = 0.0f;
+    Real measured_doppler_hz = 0.0f;
     Real range_bin_offset = 0.0f;
     Real doppler_bin_offset = 0.0f;
     bool valid = false;
+    problem::Vec3 velocity_mps = problem::Vec3::Zero();
     problem::Vec3 direction = problem::Vec3::Zero();
     problem::Vec3 predicted_direction = problem::Vec3::Zero();
     std::size_t range_bin = 0;

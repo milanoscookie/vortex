@@ -4,14 +4,14 @@
 
 #include <cmath>
 
-class LPButterworthCoeff {
+class HPButterworthCoeff {
   public:
     using FilterCoeff = IIRFilter::FilterCoeff;
 
-    LPButterworthCoeff() = default;
-    ~LPButterworthCoeff() = default;
+    HPButterworthCoeff() = default;
+    ~HPButterworthCoeff() = default;
 
-    LPButterworthCoeff(double cutoffFrequency, double samplingRate)
+    HPButterworthCoeff(double cutoffFrequency, double samplingRate)
         : cutoffFrequency_(cutoffFrequency), samplingRate_(samplingRate) {
         calculateCoefficients();
     }
@@ -44,9 +44,9 @@ class LPButterworthCoeff {
         constexpr double q = 0.7071067811865476;
         const double alpha = sinw0 / (2.0 * q);
 
-        double b0 = (1.0 - cosw0) * 0.5;
-        double b1 = 1.0 - cosw0;
-        double b2 = (1.0 - cosw0) * 0.5;
+        double b0 = (1.0 + cosw0) * 0.5;
+        double b1 = -(1.0 + cosw0);
+        double b2 = (1.0 + cosw0) * 0.5;
         const double a0 = 1.0 + alpha;
         double a1 = -2.0 * cosw0;
         double a2 = 1.0 - alpha;

@@ -107,11 +107,11 @@ template <size_t NumX, size_t NumY> class Probe {
             for (size_t iy = 0; iy < NumY; ++iy) {
                 const size_t flat_index = flatten(ix, iy);
                 compiled.element_positions_m.col(static_cast<Eigen::Index>(flat_index)) =
-                    elementPosition(ix, iy);
+                    elementPosition(ix, iy).template cast<problem::Real>();
                 compiled.element_delay_samples(static_cast<Eigen::Index>(flat_index)) =
                     static_cast<problem::Real>((*this)(ix, iy).delay);
                 compiled.element_weight(static_cast<Eigen::Index>(flat_index)) =
-                    (*this)(ix, iy).isActive() ? (*this)(ix, iy).weight : 0.0f;
+                    (*this)(ix, iy).isActive() ? (*this)(ix, iy).weight : problem::Real(0.0);
             }
         }
         return compiled;

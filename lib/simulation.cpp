@@ -28,6 +28,7 @@ RadarSimulator::RadarSimulator(const ProblemDescription &description)
                      description.cars,
                      description.floorplane_clutter,
                      description.simulator.random_seed) {
+    simulator_settings_ = description.simulator;
     default_probe_state_ = prepareDefaultProbeState(description.probe);
 }
 
@@ -89,4 +90,25 @@ RadarSimulator::SimulationMetrics
 RadarSimulator::metricsFromObservation(problem::Real t_s,
                                        const radar::TargetObservation &observation) const noexcept {
     return radar::makeSimulationMetrics(t_s, observation);
+}
+
+bool RadarSimulator::isGuessLocationWithinPredictedCar(const Vec3 &guesslocation) const noexcept {
+    if (dynamics_.empty()) {
+        return false;
+    }
+
+    const CarDynamics &car_dynamics = dynamics_.front();
+    const CarSettings &car_settings = car_dynamics.car();
+    const problem::Real prediction_time_s = time_s_ + simulator_settings_.prediction_duration_s;
+    const Vec3 actual_location = car_dynamics.positionAt(prediction_time_s);
+    const Vec3 delta = guesslocation - actual_location;
+
+    const problem::Real yaw_rad = car_dynamics.yawAt(prediction_time_s);
+    const problem::Real cos_yaw = std::cos(yaw_rad);
+    const problem::Real sin_yaw = std::sin(yaw_rad);
+    const problem::Real longitudinal_offset_m = cos_yaw * delta.x() + sin_yaw * delta.y();
+    const problem::Real lateral_offset_m = -sin_yaw * delta.x() + cos_yaw * delta.y();
+
+    return std::abs(longitudinal_offset_m) <= 0.5f * car_settings.length_m &&
+           std::abs(lateral_offset_m) <= 0.5f * car_settings.width_m;
 }

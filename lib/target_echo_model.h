@@ -11,10 +11,10 @@
 namespace radar {
 
 template <typename Complex> inline Complex unitPhasor(problem::Real phase) noexcept {
-    problem::Real sin_phase = 0.0f;
-    problem::Real cos_phase = 0.0f;
+    problem::Real sin_phase = 0.0;
+    problem::Real cos_phase = 0.0;
 #if defined(__GNUC__) || defined(__clang__)
-    __builtin_sincosf(phase, &sin_phase, &cos_phase);
+    __builtin_sincos(phase, &sin_phase, &cos_phase);
 #else
     sin_phase = std::sin(phase);
     cos_phase = std::cos(phase);
@@ -31,7 +31,7 @@ inline Complex makeMonostaticBaseReturn(const TargetObservation &observation,
     const problem::Real delay_samples = observation.delay_s * radar_settings.sample_rate_hz;
     const problem::Real path_gain =
         radar_settings.field_gain /
-        std::max(observation.safe_range_m * observation.safe_range_m, 1.0e-6f);
+        std::max(observation.safe_range_m * observation.safe_range_m, problem::Real(1.0e-6));
     return tx_history.delayedSample(sample_index, delay_samples) * reflectivity * path_gain;
 }
 

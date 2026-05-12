@@ -100,9 +100,10 @@ bool caCfarDecision(const std::vector<Real> &rd_power,
 
     const Real noise_power = static_cast<Real>(noise_sum / static_cast<double>(noise_count));
     const Real cell_power = rd_power[dbin * range_count + rbin];
-    const Real threshold_power = std::max(0.0f, config.rd_detection_threshold_scale) * noise_power;
-    const Real snr_linear = cell_power / std::max(noise_power, 1.0e-12f);
-    const Real min_snr_linear = std::pow(10.0f, config.cfar_min_snr_db / 10.0f);
+    const Real threshold_power =
+        std::max(Real(0.0), config.rd_detection_threshold_scale) * noise_power;
+    const Real snr_linear = cell_power / std::max(noise_power, Real(1.0e-12));
+    const Real min_snr_linear = std::pow(Real(10.0), config.cfar_min_snr_db / Real(10.0));
     if (noise_out != nullptr) {
         *noise_out = noise_power;
     }
@@ -130,17 +131,17 @@ bool shouldMergeMeasurements(const MeasurementCandidate &lhs,
 } // namespace
 
 std::vector<DetectionCell> detectLocalPeakCells(const std::vector<Real> &rd_power,
-                                               std::size_t range_count,
-                                               std::size_t nfft_doppler,
-                                               const DetectionConfig &config) {
+                                                std::size_t range_count,
+                                                std::size_t nfft_doppler,
+                                                const DetectionConfig &config) {
     std::vector<DetectionCell> detections;
     for (std::size_t dbin = 0; dbin < nfft_doppler; ++dbin) {
         if (isZeroDopplerExcluded(dbin, nfft_doppler, config.zero_doppler_guard_bins)) {
             continue;
         }
         for (std::size_t rbin = 0; rbin < range_count; ++rbin) {
-            Real noise_power = 0.0f;
-            Real snr_linear = 0.0f;
+            Real noise_power = Real(0.0);
+            Real snr_linear = Real(0.0);
             if (!caCfarDecision(rd_power,
                                 range_count,
                                 nfft_doppler,
@@ -227,15 +228,15 @@ Real computeAssociationDistanceSq(const RadarConfig &radar_config,
                                   Real delta_azimuth_deg,
                                   Real delta_elevation_deg,
                                   const DetectionConfig &config) {
-    const Real sigma_range = std::max(config.range_association_sigma_m, 1.0e-3f);
-    const Real sigma_velocity =
-        std::max(0.5f * config.doppler_association_sigma_hz * radar_config.wavelengthM(), 1.0e-3f);
-    const Real sigma_azimuth = std::max(config.azimuth_association_sigma_deg, 1.0e-3f);
-    const Real sigma_elevation = std::max(config.elevation_association_sigma_deg, 1.0e-3f);
-    return std::pow(delta_range_m / sigma_range, 2.0f) +
-           std::pow(delta_radial_velocity_mps / sigma_velocity, 2.0f) +
-           std::pow(delta_azimuth_deg / sigma_azimuth, 2.0f) +
-           std::pow(delta_elevation_deg / sigma_elevation, 2.0f);
+    const Real sigma_range = std::max(config.range_association_sigma_m, Real(1.0e-3));
+    const Real sigma_velocity = std::max(
+        Real(0.5) * config.doppler_association_sigma_hz * radar_config.wavelengthM(), Real(1.0e-3));
+    const Real sigma_azimuth = std::max(config.azimuth_association_sigma_deg, Real(1.0e-3));
+    const Real sigma_elevation = std::max(config.elevation_association_sigma_deg, Real(1.0e-3));
+    return std::pow(delta_range_m / sigma_range, Real(2.0)) +
+           std::pow(delta_radial_velocity_mps / sigma_velocity, Real(2.0)) +
+           std::pow(delta_azimuth_deg / sigma_azimuth, Real(2.0)) +
+           std::pow(delta_elevation_deg / sigma_elevation, Real(2.0));
 }
 
 bool shouldSuppressBirth(const MeasurementCandidate &measurement,

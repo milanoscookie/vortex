@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 
 namespace fmcw_tracker {
@@ -10,12 +11,31 @@ using detail::AssignmentSolution;
 using detail::KinematicEstimate;
 using detail::Vec3;
 
+namespace {
+
+constexpr bool kPrintResidualDopplerDebug = false;
+
+Vec3 directionFromAzElDeg(Real azimuth_deg, Real elevation_deg) {
+    const Real az = azimuth_deg * problem::Constants::kPi / 180.0f;
+    const Real el = elevation_deg * problem::Constants::kPi / 180.0f;
+    Vec3 direction;
+    direction.x() = std::cos(el) * std::cos(az);
+    direction.y() = std::cos(el) * std::sin(az);
+    direction.z() = std::sin(el);
+    return detail::normalizedOr(direction, Vec3::UnitX());
+}
+
+} // namespace
+
 void StreamingTracker::updateTracks(const detail::SceneObservation &observation) {
     struct PredictedTrack {
         std::size_t track_index = 0;
         Real dt = 0.0f;
         Vec3 position_m = Vec3::Zero();
         Vec3 velocity_mps = Vec3::Zero();
+        Vec3 direction = Vec3::UnitX();
+        Real azimuth_deg = 0.0f;
+        Real elevation_deg = 0.0f;
         KinematicEstimate estimate;
     };
 
@@ -98,6 +118,10 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
         track.position_m = Vec3::Zero();
         track.velocity_mps = Vec3::Zero();
         track.direction = Vec3::UnitX();
+        track.azimuth_deg = 0.0f;
+        track.elevation_deg = 0.0f;
+        track.azimuth_rate_degps = 0.0f;
+        track.elevation_rate_degps = 0.0f;
         track.hit_count = 0U;
         track.miss_count = 0U;
         track.recent_matches.clear();
@@ -133,6 +157,10 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
             const KinematicEstimate estimate = detail::makeKinematicEstimate(
                 radar_config_, track.position_m, track.velocity_mps, measurement.direction);
             track.direction = estimate.direction;
+            track.azimuth_deg = detail::measurementAzimuthDeg(measurement);
+            track.elevation_deg = detail::measurementElevationDeg(measurement);
+            track.azimuth_rate_degps = 0.0f;
+            track.elevation_rate_degps = 0.0f;
             track.range_m = estimate.range_m;
             track.radial_velocity_mps = estimate.radial_velocity_mps;
             track.doppler_hz = estimate.doppler_hz;
@@ -150,12 +178,23 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
         if (!track.initialized) {
             continue;
         }
-        const Real dt = std::max(0.0f, observation.time_s - track.time_s);
+        const Real dt = std::max(Real(0.0), observation.time_s - track.time_s);
         const Vec3 predicted_position = track.position_m + track.velocity_mps * dt;
+        const Real predicted_azimuth_deg = track.azimuth_deg + track.azimuth_rate_degps * dt;
+        const Real predicted_elevation_deg = std::clamp(
+            track.elevation_deg + track.elevation_rate_degps * dt, Real(0.0), Real(90.0));
+        const Vec3 predicted_direction =
+            directionFromAzElDeg(predicted_azimuth_deg, predicted_elevation_deg);
         const KinematicEstimate estimate = detail::makeKinematicEstimate(
-            radar_config_, predicted_position, track.velocity_mps, track.direction);
-        predicted_tracks.push_back(
-            PredictedTrack{track_index, dt, predicted_position, track.velocity_mps, estimate});
+            radar_config_, predicted_position, track.velocity_mps, predicted_direction);
+        predicted_tracks.push_back(PredictedTrack{track_index,
+                                                  dt,
+                                                  predicted_position,
+                                                  track.velocity_mps,
+                                                  predicted_direction,
+                                                  predicted_azimuth_deg,
+                                                  predicted_elevation_deg,
+                                                  estimate});
     }
 
     std::vector<std::vector<Real>> cost_matrix(
@@ -164,8 +203,6 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
     for (std::size_t predicted_index = 0; predicted_index < predicted_tracks.size();
          ++predicted_index) {
         const PredictedTrack &predicted = predicted_tracks[predicted_index];
-        const Real predicted_azimuth_deg = detail::azimuthDeg(predicted.estimate.direction);
-        const Real predicted_elevation_deg = detail::elevationDeg(predicted.estimate.direction);
         for (std::size_t measurement_index = 0; measurement_index < observation.measurements.size();
              ++measurement_index) {
             const MeasurementCandidate &measurement = observation.measurements[measurement_index];
@@ -173,17 +210,17 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
             const Real delta_radial_velocity =
                 measurement.radial_velocity_mps - predicted.estimate.radial_velocity_mps;
             const Real delta_azimuth = detail::angleDifferenceDeg(
-                detail::measurementAzimuthDeg(measurement), predicted_azimuth_deg);
+                detail::measurementAzimuthDeg(measurement), predicted.azimuth_deg);
             const Real delta_elevation = detail::angleDifferenceDeg(
-                detail::measurementElevationDeg(measurement), predicted_elevation_deg);
+                detail::measurementElevationDeg(measurement), predicted.elevation_deg);
             const Real delta_doppler = measurement.doppler_hz - predicted.estimate.doppler_hz;
             if (std::abs(delta_range) > detection_config_.track_max_range_error_m ||
                 std::abs(delta_doppler) > detection_config_.track_max_doppler_error_hz ||
                 std::abs(delta_azimuth) > detection_config_.track_max_azimuth_error_deg ||
                 std::abs(delta_elevation) > detection_config_.track_max_elevation_error_deg) {
                 if (active_tracks_.size() > 0 && (scene_batch_results_.size() + 1) % 100 == 0) {
-                     // Only log failed candidates for existing tracks periodically to avoid noise
-                     // but here we just keep it simple.
+                    // Only log failed candidates for existing tracks periodically to avoid noise
+                    // but here we just keep it simple.
                 }
                 continue;
             }
@@ -219,8 +256,7 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
             const MeasurementCandidate &measurement =
                 observation.measurements[static_cast<std::size_t>(assigned_measurement)];
             const Real dt = std::max(radar_config_.chirp_duration_s, predicted.dt);
-            const Vec3 u_pred =
-                detail::normalizedOr(predicted.position_m, predicted.estimate.direction);
+            const Vec3 u_pred = predicted.direction;
             const Real r_pred = predicted.position_m.norm();
             const Real range_residual = measurement.range_m - r_pred;
             const Vec3 residual_los = range_residual * u_pred;
@@ -228,25 +264,62 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
             const Vec3 residual_cart = measured_position - predicted.position_m;
             const Vec3 residual_cross = residual_cart - residual_cart.dot(u_pred) * u_pred;
 
+            const Real measured_azimuth_deg = detail::measurementAzimuthDeg(measurement);
+            const Real measured_elevation_deg = detail::measurementElevationDeg(measurement);
+            const Real azimuth_residual_deg =
+                detail::angleDifferenceDeg(measured_azimuth_deg, predicted.azimuth_deg);
+            const Real elevation_residual_deg =
+                detail::angleDifferenceDeg(measured_elevation_deg, predicted.elevation_deg);
+            track.azimuth_deg =
+                predicted.azimuth_deg + detection_config_.track_alpha_aoa * azimuth_residual_deg;
+            track.elevation_deg =
+                std::clamp(predicted.elevation_deg +
+                               detection_config_.track_alpha_aoa * elevation_residual_deg,
+                           Real(0.0),
+                           Real(90.0));
+            track.azimuth_rate_degps =
+                track.azimuth_rate_degps +
+                (detection_config_.track_beta_aoa / dt) * azimuth_residual_deg;
+            track.elevation_rate_degps =
+                track.elevation_rate_degps +
+                (detection_config_.track_beta_aoa / dt) * elevation_residual_deg;
+            const Vec3 filtered_direction =
+                directionFromAzElDeg(track.azimuth_deg, track.elevation_deg);
+
             track.position_m = predicted.position_m +
                                detection_config_.track_alpha_range * residual_los +
                                detection_config_.track_alpha_angle * residual_cross;
+            const Real filtered_range_m =
+                std::max<Real>(track.position_m.norm(), measurement.range_m);
+            track.position_m = filtered_range_m * filtered_direction;
             track.velocity_mps =
                 predicted.velocity_mps + (detection_config_.track_beta_angle / dt) * residual_cross;
-            const Real radial_velocity_pred = predicted.velocity_mps.dot(u_pred);
+            const Real radial_velocity_pred = predicted.velocity_mps.dot(filtered_direction);
             const Real radial_velocity_residual =
                 measurement.radial_velocity_mps - radial_velocity_pred;
-            track.velocity_mps +=
-                detection_config_.track_gamma_radial * radial_velocity_residual * u_pred;
+            track.velocity_mps += detection_config_.track_gamma_radial * radial_velocity_residual *
+                                  filtered_direction;
             track.velocity_mps.z() = 0.0f;
 
             const KinematicEstimate estimate = detail::makeKinematicEstimate(
-                radar_config_, track.position_m, track.velocity_mps, measurement.direction);
+                radar_config_, track.position_m, track.velocity_mps, filtered_direction);
             track.time_s = observation.time_s;
-            track.direction = estimate.direction;
+            track.direction = filtered_direction;
             track.range_m = estimate.range_m;
-            track.radial_velocity_mps = estimate.radial_velocity_mps;
-            track.doppler_hz = estimate.doppler_hz;
+            track.radial_velocity_mps = track.velocity_mps.dot(filtered_direction);
+            track.doppler_hz = 2.0f * track.radial_velocity_mps / radar_config_.wavelengthM();
+            const double predicted_base_doppler_hz =
+                2.0 * static_cast<double>(track.velocity_mps.dot(track.direction)) /
+                static_cast<double>(radar_config_.wavelengthM());
+            const double residual_doppler_hz =
+                static_cast<double>(measurement.doppler_hz) - predicted_base_doppler_hz;
+            if constexpr (kPrintResidualDopplerDebug) {
+                std::printf("Car %zu: measured=%.1f Hz, base=%.1f Hz, residual=%+.1f Hz\n",
+                            track.id,
+                            static_cast<double>(measurement.doppler_hz),
+                            predicted_base_doppler_hz,
+                            residual_doppler_hz);
+            }
             track.hit_count += 1U;
             track.miss_count = 0U;
             detail::updateRecentMatches(
@@ -270,9 +343,10 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
             report.measurement_index = static_cast<std::size_t>(assigned_measurement);
             report.time_s = observation.time_s;
             report.predicted_range_m = predicted.estimate.range_m;
-            report.predicted_doppler_hz = predicted.estimate.doppler_hz;
+            report.predicted_doppler_hz = static_cast<Real>(predicted_base_doppler_hz);
             report.range_m = track.range_m;
             report.doppler_hz = track.doppler_hz;
+            report.measured_doppler_hz = measurement.doppler_hz;
             report.radial_velocity_mps = track.radial_velocity_mps;
             report.position_m = track.position_m;
             report.velocity_mps = track.velocity_mps;
@@ -291,7 +365,9 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
         track.position_m = predicted.position_m;
         track.velocity_mps = predicted.velocity_mps;
         track.time_s = observation.time_s;
-        track.direction = predicted.estimate.direction;
+        track.direction = predicted.direction;
+        track.azimuth_deg = predicted.azimuth_deg;
+        track.elevation_deg = predicted.elevation_deg;
         track.range_m = predicted.estimate.range_m;
         track.radial_velocity_mps = predicted.estimate.radial_velocity_mps;
         track.doppler_hz = predicted.estimate.doppler_hz;
@@ -314,6 +390,7 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
         report.predicted_doppler_hz = predicted.estimate.doppler_hz;
         report.range_m = track.range_m;
         report.doppler_hz = track.doppler_hz;
+        report.measured_doppler_hz = track.doppler_hz;
         report.radial_velocity_mps = track.radial_velocity_mps;
         report.position_m = track.position_m;
         report.velocity_mps = track.velocity_mps;
@@ -377,6 +454,7 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
         report.predicted_doppler_hz = measurement.doppler_hz;
         report.range_m = track.range_m;
         report.doppler_hz = track.doppler_hz;
+        report.measured_doppler_hz = measurement.doppler_hz;
         report.radial_velocity_mps = track.radial_velocity_mps;
         report.position_m = track.position_m;
         report.velocity_mps = track.velocity_mps;
@@ -410,6 +488,7 @@ void StreamingTracker::updateTracks(const detail::SceneObservation &observation)
         report.time_s = observation.time_s;
         report.range_m = track.range_m;
         report.doppler_hz = track.doppler_hz;
+        report.measured_doppler_hz = track.doppler_hz;
         report.radial_velocity_mps = track.radial_velocity_mps;
         report.position_m = track.position_m;
         report.velocity_mps = track.velocity_mps;

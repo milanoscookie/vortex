@@ -6,8 +6,8 @@
 
 template <int IR_SIZE> class LinearSystem {
   public:
-    using Block = Eigen::Matrix<float, dsp::BLOCK_SIZE, 1>;
-    using IRBlock = Eigen::Matrix<float, IR_SIZE, 1>;
+    using Block = Eigen::Matrix<double, dsp::BLOCK_SIZE, 1>;
+    using IRBlock = Eigen::Matrix<double, IR_SIZE, 1>;
 
     static constexpr int kNumBlocks = (IR_SIZE + dsp::BLOCK_SIZE - 1) / dsp::BLOCK_SIZE + 1;
 
@@ -32,7 +32,7 @@ template <int IR_SIZE> class LinearSystem {
 
         // For each output sample within the block
         for (int n = 0; n < dsp::BLOCK_SIZE; ++n) {
-            float y = 0.0f;
+            double y = 0.0;
 
             // Convolve with h[0..IR_SIZE-1]
             for (int k = 0; k < IR_SIZE; ++k) {

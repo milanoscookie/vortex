@@ -102,6 +102,56 @@ double averageTrackHistoryLength(const fmcw_tracker::SceneSummary &summary) {
     return total / static_cast<double>(summary.track_histories.size());
 }
 
+double projectObservedMicrodopplerToVerticalHz(double observed_frequency_hz,
+                                               double /*elevation_deg*/) {
+    return observed_frequency_hz;
+}
+
+void printLatestTrackMicrodopplerEstimates(const fmcw_tracker::SceneSummary &summary) {
+    std::printf("  Latest Track Micro-Doppler Estimates:\n");
+    const std::size_t count = std::min<std::size_t>(3U, summary.track_histories.size());
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto &history = summary.track_histories[i];
+        const auto valid_report_it = std::find_if(history.reports.rbegin(),
+                                                  history.reports.rend(),
+                                                  [](const auto &report) { return report.valid; });
+        const double elevation_deg =
+            valid_report_it != history.reports.rend()
+                ? fmcw_tracker::detail::elevationDeg(valid_report_it->direction)
+                : std::numeric_limits<double>::quiet_NaN();
+        const double vertical_est_hz = projectObservedMicrodopplerToVerticalHz(
+            history.microdoppler_frequency_hz, elevation_deg);
+        std::printf("    Track %zu: obs=%6.3f Hz, truth=%6.3f Hz, err=%+6.3f Hz, El=%5.1f deg, "
+                    "valid CPIs=%zu\n",
+                    history.id,
+                    history.microdoppler_frequency_hz,
+                    history.microdoppler_truth_frequency_hz,
+                    vertical_est_hz - history.microdoppler_truth_frequency_hz,
+                    elevation_deg,
+                    history.microdoppler_valid_cpi_count);
+    }
+}
+
+void printLatestBlindAoAMicrodopplerEstimates(const fmcw_tracker::SceneSummary &summary) {
+    std::printf("  Latest Blind AoA Micro-Doppler Estimates:\n");
+    const std::size_t count =
+        std::min<std::size_t>(3U, summary.blind_aoa_microdoppler_summaries.size());
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto &entry = summary.blind_aoa_microdoppler_summaries[i];
+        const double vertical_est_hz = projectObservedMicrodopplerToVerticalHz(
+            entry.microdoppler_frequency_hz, entry.elevation_deg);
+        std::printf("    Blind #%zu: Az=%6.1f, El=%6.1f, obs=%6.3f Hz, truth=%6.3f Hz, "
+                    "err=%+6.3f Hz, valid CPIs=%zu\n",
+                    entry.rank,
+                    entry.azimuth_deg,
+                    entry.elevation_deg,
+                    entry.microdoppler_frequency_hz,
+                    entry.microdoppler_truth_frequency_hz,
+                    vertical_est_hz - entry.microdoppler_truth_frequency_hz,
+                    entry.microdoppler_valid_cpi_count);
+    }
+}
+
 double batchMeanConfirmedPositionErrorM(const fmcw_tracker::SceneBatchResult &batch) {
     std::vector<problem::Vec3> estimated_positions;
     for (const fmcw_tracker::TrackReport &track : batch.tracks) {
@@ -250,24 +300,29 @@ TrackingQualityStats computeTrackingQualityStats(const problem::ProblemDescripti
         confirmed_tracks_sum += static_cast<double>(confirmed_count);
         stats.max_confirmed_tracks_in_batch =
             std::max(stats.max_confirmed_tracks_in_batch, confirmed_count);
-        
+
         // Custom batch mean error calculation for statistics
         std::vector<problem::Vec3> est_pos;
-        for (const auto& t : batch.tracks) {
-            if (t.valid && t.status == fmcw_tracker::TrackStatus::Confirmed) est_pos.push_back(t.position_m);
+        for (const auto &t : batch.tracks) {
+            if (t.valid && t.status == fmcw_tracker::TrackStatus::Confirmed)
+                est_pos.push_back(t.position_m);
         }
-        
+
         if (!est_pos.empty() && !batch.truth_metrics.empty()) {
             double batch_total_err = 0.0;
             std::size_t batch_matches = 0;
             std::vector<bool> used(est_pos.size(), false);
-            for (const auto& truth : batch.truth_metrics) {
+            for (const auto &truth : batch.truth_metrics) {
                 double best_err = std::numeric_limits<double>::infinity();
                 int best_idx = -1;
-                for (int i=0; i<(int)est_pos.size(); ++i) {
-                    if (used[i]) continue;
+                for (int i = 0; i < (int)est_pos.size(); ++i) {
+                    if (used[i])
+                        continue;
                     double err = (est_pos[i] - truth.position_m).norm();
-                    if (err < best_err) { best_err = err; best_idx = i; }
+                    if (err < best_err) {
+                        best_err = err;
+                        best_idx = i;
+                    }
                 }
                 if (best_idx >= 0 && best_err < kMatchedTrackErrorThresholdM) {
                     used[best_idx] = true;
@@ -319,83 +374,65 @@ int main(int argc, char **argv) {
         const problem::ProblemDescription description = problem::kDefaultProblemDescription;
 
         fmcw_tracker::StreamingTracker tracker(description);
-        radar_algo::streamRadarChirps(description,
-                                      [&tracker, &description](std::size_t chirp_index,
-                                                 std::span<const radar_algo::Complex> tx_chirp,
-                                                 std::span<const radar_algo::Complex> rx_block) {
-                                          tracker.pushChirp(chirp_index, tx_chirp, rx_block);
-                                          
-                                          // Every 50th chirp, perform a blind AoA estimation of the top 3 peaks in the range-summed angular map
-                                          // and compare to the truth AoA of all 3 cars.
-                                          if (chirp_index % 50 == 0) {
-                                              const auto radar_cfg = tracker.radarConfig();
-                                              const auto det_cfg = tracker.detectionConfig();
-                                              const auto &range_indices = tracker.rangeIndices();
-                                              const std::size_t num_rx = radar_cfg.numRx();
-                                              const float time_s = static_cast<float>(chirp_index) * radar_cfg.chirp_duration_s;
-                                              
-                                              const std::size_t nfft = det_cfg.nfft_range_min;
-                                              std::vector<float> range_power(range_indices.size(), 0.0f);
-                                              std::vector<std::vector<radar_algo::Complex>> range_rx(num_rx, std::vector<radar_algo::Complex>(range_indices.size()));
-                                              
-                                              Eigen::FFT<float> fft;
-                                              std::vector<radar_algo::Complex> fft_input(nfft, {0.0f, 0.0f});
-                                              std::vector<radar_algo::Complex> fft_output(nfft);
-                                              
-                                              for (std::size_t rx = 0; rx < num_rx; ++rx) {
-                                                  std::fill(fft_input.begin(), fft_input.end(), radar_algo::Complex{0.0f, 0.0f});
-                                                  for (std::size_t sample = 0; sample < radar_cfg.block_size; ++sample) {
-                                                      const auto conj_tx = std::conj(tx_chirp[sample]);
-                                                      float win = 0.5f - 0.5f * std::cos(2.0f * problem::Constants::kPi * sample / (radar_cfg.block_size - 1));
-                                                      fft_input[sample] = rx_block[sample * num_rx + rx] * conj_tx * win;
-                                                  }
-                                                  fft.fwd(fft_output, fft_input);
-                                                  for (std::size_t k = 0; k < range_indices.size(); ++k) {
-                                                      const auto val = fft_output[static_cast<std::size_t>(range_indices[k])];
-                                                      range_rx[rx][k] = val;
-                                                      range_power[k] += std::norm(val);
-                                                  }
-                                              }
-                                              
-                                              struct RangePeak { std::size_t idx; float power; };
-                                              std::vector<RangePeak> peaks;
-                                              for (std::size_t k = 1; k + 1 < range_indices.size(); ++k) {
-                                                  if (range_power[k] > range_power[k-1] && range_power[k] > range_power[k+1]) {
-                                                      peaks.push_back({k, range_power[k]});
-                                                  }
-                                              }
-                                              std::sort(peaks.begin(), peaks.end(), [](auto& a, auto& b) { return a.power > b.power; });
-                                              if (peaks.size() > 3) peaks.resize(3);
-                                              
-                                              printf("[Chirp %4zu, t=%6.3fs] Per-Chirp AoA Analysis:\n", chirp_index, time_s);
-                                              printf("  Top Blind Estimates:\n");
-                                              for (std::size_t i = 0; i < peaks.size(); ++i) {
-                                                  std::vector<radar_algo::Complex> snapshot(num_rx);
-                                                  for (std::size_t rx = 0; rx < num_rx; ++rx) snapshot[rx] = range_rx[rx][peaks[i].idx];
-                                                  
-                                                  auto aoa_peaks = tracker.estimateTopAoAs(snapshot, 1);
-                                                  if (!aoa_peaks.empty()) {
-                                                      const float range_m = -radar_cfg.speed_of_light_mps * 
-                                                          (static_cast<float>(det_cfg.nfft_range_min) / (nfft * (1.0f/radar_cfg.sample_rate_hz))) // This is wrong, let's use the axis
-                                                          * 0.0f; // placeholder
-                                                      // Better: use the tracker's axis if we exposed it, but we can just use truth for comparison.
-                                                      printf("    #%zu: Az=%6.1f, El=%6.1f (score=%8.1f)\n",
-                                                             i+1, aoa_peaks[0].azimuth_deg, aoa_peaks[0].elevation_deg,
-                                                             aoa_peaks[0].score);
-                                                  }
-                                              }
-                                              
-                                              printf("  Truth Car AoAs:\n");
-                                              for (std::size_t i = 0; i < description.cars.size(); ++i) {
-                                                  auto truth = fmcw_tracker::truthAtTime(description, time_s, i);
-                                                  auto dir = truth.position_m.normalized();
-                                                  printf("    Car %zu: Az=%6.1f, El=%6.1f, Range=%6.1f\n",
-                                                         i+1, fmcw_tracker::detail::azimuthDeg(dir),
-                                                         fmcw_tracker::detail::elevationDeg(dir),
-                                                         truth.range_m);
-                                              }
-                                          }
-                                      });
+        radar_algo::streamRadarChirps(
+            description,
+            [&tracker, &description](std::size_t chirp_index,
+                                     std::span<const radar_algo::Complex> tx_chirp,
+                                     std::span<const radar_algo::Complex> rx_block) {
+                tracker.pushChirp(chirp_index, tx_chirp, rx_block);
+
+                // Every 50th chirp, perform a blind AoA estimation of the top 3 peaks in the
+                // range-summed angular map and compare to the truth AoA of all 3 cars.
+                if (chirp_index % 50 == 0) {
+                    const auto radar_cfg = tracker.radarConfig();
+                    const double time_s =
+                        static_cast<double>(chirp_index) * radar_cfg.chirp_duration_s;
+                    const fmcw_tracker::SceneSummary live_summary = tracker.buildSceneSummary();
+
+                    printf("[Chirp %4zu, t=%6.3fs] Tracker Measurement Analysis:\n",
+                           chirp_index,
+                           time_s);
+                    printf("  Top RD-Cluster Measurements:\n");
+                    if (!live_summary.scene_batches.empty()) {
+                        std::vector<const fmcw_tracker::MeasurementCandidate *> measurements;
+                        for (const auto &measurement :
+                             live_summary.scene_batches.back().measurements) {
+                            measurements.push_back(&measurement);
+                        }
+                        std::sort(measurements.begin(),
+                                  measurements.end(),
+                                  [](const auto *lhs, const auto *rhs) {
+                                      return lhs->integrated_power > rhs->integrated_power;
+                                  });
+                        const std::size_t count = std::min<std::size_t>(3U, measurements.size());
+                        for (std::size_t i = 0; i < count; ++i) {
+                            const auto &measurement = *measurements[i];
+                            printf("    #%zu: Range=%6.1f m, Doppler=%7.1f Hz, Az=%6.1f, El=%6.1f, "
+                                   "power=%8.1f, cells=%zu\n",
+                                   i + 1,
+                                   measurement.range_m,
+                                   measurement.doppler_hz,
+                                   fmcw_tracker::detail::measurementAzimuthDeg(measurement),
+                                   fmcw_tracker::detail::measurementElevationDeg(measurement),
+                                   measurement.integrated_power,
+                                   measurement.cluster_size);
+                        }
+                    }
+
+                    printf("  Truth Car AoAs:\n");
+                    for (std::size_t i = 0; i < description.cars.size(); ++i) {
+                        auto truth = fmcw_tracker::truthAtTime(description, time_s, i);
+                        auto dir = truth.position_m.normalized();
+                        printf("    Car %zu: Az=%6.1f, El=%6.1f, Range=%6.1f\n",
+                               i + 1,
+                               fmcw_tracker::detail::azimuthDeg(dir),
+                               fmcw_tracker::detail::elevationDeg(dir),
+                               truth.range_m);
+                    }
+                    printLatestTrackMicrodopplerEstimates(live_summary);
+                    printLatestBlindAoAMicrodopplerEstimates(live_summary);
+                }
+            });
 
         const fmcw_tracker::SceneSummary summary = tracker.buildSceneSummary();
         if (summary.scene_batches.empty()) {
@@ -443,7 +480,7 @@ int main(int argc, char **argv) {
         std::cout << "Track histories: " << summary.track_histories.size() << " total, "
                   << countTrackHistoriesWithStatus(summary, fmcw_tracker::TrackStatus::Confirmed)
                   << " confirmed\n";
-        
+
         std::cout << "Tracking quality: avg measurements/CPI="
                   << averageMeasurementsPerBatch(summary)
                   << ", avg confirmed tracks/CPI=" << quality.avg_confirmed_tracks_per_batch
@@ -454,7 +491,8 @@ int main(int argc, char **argv) {
                   << ", matched confirmed histories=" << quality.matched_confirmed_histories
                   << ", false confirmed histories=" << quality.false_confirmed_histories
                   << ", fragmentation count=" << quality.fragmentation_count
-                  << ", avg confirmation latency=" << formatErrorValue(quality.avg_confirmation_latency_s)
+                  << ", avg confirmation latency="
+                  << formatErrorValue(quality.avg_confirmation_latency_s)
                   << " s, scene mean confirmed position error="
                   << formatErrorValue(quality.scene_mean_confirmed_position_error_m)
                   << " m, final batch confirmed position error="
