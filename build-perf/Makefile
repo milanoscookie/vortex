@@ -127,6 +127,19 @@ depend:
 .PHONY : depend
 
 #=============================================================================
+# Target rules for targets named vortex_lib_obj
+
+# Build rule for target.
+vortex_lib_obj: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vortex_lib_obj
+.PHONY : vortex_lib_obj
+
+# fast build rule for target.
+vortex_lib_obj/fast:
+	$(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/build
+.PHONY : vortex_lib_obj/fast
+
+#=============================================================================
 # Target rules for targets named vortex_core
 
 # Build rule for target.
@@ -151,6 +164,19 @@ Vortex: cmake_check_build_system
 Vortex/fast:
 	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/Vortex.dir/build.make src/CMakeFiles/Vortex.dir/build
 .PHONY : Vortex/fast
+
+#=============================================================================
+# Target rules for targets named vortex_test_bounded_queue
+
+# Build rule for target.
+vortex_test_bounded_queue: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vortex_test_bounded_queue
+.PHONY : vortex_test_bounded_queue
+
+# fast build rule for target.
+vortex_test_bounded_queue/fast:
+	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_bounded_queue.dir/build.make tests/CMakeFiles/vortex_test_bounded_queue.dir/build
+.PHONY : vortex_test_bounded_queue/fast
 
 #=============================================================================
 # Target rules for targets named vortex_test_ring_buffer
@@ -217,19 +243,6 @@ vortex_test_linear_system/fast:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_linear_system.dir/build.make tests/CMakeFiles/vortex_test_linear_system.dir/build
 .PHONY : vortex_test_linear_system/fast
 
-#=============================================================================
-# Target rules for targets named vortex_test_fmcw_tracker
-
-# Build rule for target.
-vortex_test_fmcw_tracker: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vortex_test_fmcw_tracker
-.PHONY : vortex_test_fmcw_tracker
-
-# fast build rule for target.
-vortex_test_fmcw_tracker/fast:
-	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build.make tests/CMakeFiles/vortex_test_fmcw_tracker.dir/build
-.PHONY : vortex_test_fmcw_tracker/fast
-
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -241,8 +254,9 @@ help:
 	@echo "... test"
 	@echo "... Vortex"
 	@echo "... vortex_core"
+	@echo "... vortex_lib_obj"
+	@echo "... vortex_test_bounded_queue"
 	@echo "... vortex_test_double_buffer_spsc"
-	@echo "... vortex_test_fmcw_tracker"
 	@echo "... vortex_test_iir_filter"
 	@echo "... vortex_test_linear_system"
 	@echo "... vortex_test_lp_butterworth"

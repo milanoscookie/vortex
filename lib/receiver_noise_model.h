@@ -9,25 +9,25 @@
 #include <complex>
 #include <cstdint>
 #include <random>
+#include <stdexcept>
 
 namespace radar {
 
 class ReceiverNoiseModel {
   public:
-    using Complex = problem::SignalComplex;
-    using Real = problem::Real;
-    using AmpReal = problem::AmpReal;
+    using Complex = dsp::Complex;
 
-    ReceiverNoiseModel(AmpReal receiver_noiselevel_stddev,
-                       AmpReal receiver_noiselevel_mean,
-                       AmpReal receiver_noise_distribution_stddev,
+    ReceiverNoiseModel(double receiver_noiselevel_stddev,
+                       double receiver_noiselevel_mean,
+                       double receiver_noise_distribution_stddev,
                        bool use_std_normal_distribution,
                        std::uint32_t random_seed)
         : receiver_noiselevel_stddev_(receiver_noiselevel_stddev),
           receiver_noise_distribution_mean_(receiver_noiselevel_mean),
           receiver_noise_distribution_stddev_(receiver_noise_distribution_stddev),
           use_std_normal_distribution_(use_std_normal_distribution), std_rng_(random_seed),
-          std_normal_(0.0f, 1.0f) {
+          std_normal_(0.0, 1.0) {
+        validateParameters();
         updateDerivedConstants();
         seedRng(random_seed);
     }
@@ -74,9 +74,24 @@ class ReceiverNoiseModel {
         return z ^ (z >> 16);
     }
 
+    void validateParameters() const {
+        if (!std::isfinite(receiver_noiselevel_stddev_) || receiver_noiselevel_stddev_ < 0.0) {
+            throw std::invalid_argument(
+                "receiver noise level stddev must be non-negative and finite");
+        }
+        if (!std::isfinite(receiver_noise_distribution_mean_)) {
+            throw std::invalid_argument("receiver noise distribution mean must be finite");
+        }
+        if (!std::isfinite(receiver_noise_distribution_stddev_) ||
+            receiver_noise_distribution_stddev_ < 0.0) {
+            throw std::invalid_argument(
+                "receiver noise distribution stddev must be non-negative and finite");
+        }
+    }
+
     void updateDerivedConstants() noexcept {
         noise_enabled_ = receiver_noiselevel_stddev_ > 0.0f;
-        effective_sigma_ = receiver_noiselevel_stddev_ * problem::Constants::kInvSqrt2 *
+        effective_sigma_ = receiver_noiselevel_stddev_ * dsp::Constants::kInvSqrt2 *
                            receiver_noise_distribution_stddev_;
     }
 
@@ -106,24 +121,24 @@ class ReceiverNoiseModel {
         return result;
     }
 
-    Real sampleStandardNormal() noexcept {
+    double sampleStandardNormal() noexcept {
         if (use_std_normal_distribution_) {
-            return static_cast<Real>(std_normal_(std_rng_));
+            return static_cast<double>(std_normal_(std_rng_));
         }
         const unsigned bit_count = std::popcount(sampleUint32()) + std::popcount(sampleUint32()) +
                                    std::popcount(sampleUint32());
-        return (static_cast<Real>(bit_count) - kPopcountNormalMean) * kPopcountNormalScale;
+        return (static_cast<double>(bit_count) - kPopcountNormalMean) * kPopcountNormalScale;
     }
 
-    AmpReal receiver_noiselevel_stddev_ = 0.0;
-    AmpReal receiver_noise_distribution_mean_ = 0.0;
-    AmpReal receiver_noise_distribution_stddev_ = 1.0;
-    Real effective_sigma_ = 0.0f;
+    double receiver_noiselevel_stddev_ = 0.0;
+    double receiver_noise_distribution_mean_ = 0.0;
+    double receiver_noise_distribution_stddev_ = 1.0;
+    double effective_sigma_ = 0.0f;
     bool noise_enabled_ = false;
     bool use_std_normal_distribution_ = false;
     std::array<std::uint32_t, 4> rng_state_{};
     std::mt19937 std_rng_;
-    std::normal_distribution<AmpReal> std_normal_;
+    std::normal_distribution<double> std_normal_;
 };
 
 } // namespace radar

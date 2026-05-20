@@ -217,7 +217,7 @@ This is added to each active element when enabled.
 
 `StreamingTracker` is constructed from:
 
-- `problem::ProblemDescription`
+- `dsp::ProblemDescription`
 - `DetectionConfig`
 
 `RadarConfig` is derived from the scenario and contains:

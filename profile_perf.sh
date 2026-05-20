@@ -18,7 +18,7 @@ echo "=== Profiling with perf ==="
 echo "Running application with perf record..."
 
 # Record performance data
-sudo perf record -g --call-graph dwarf -F 999 "$APP" --no-truth-csv "$@"
+sudo perf record -g --call-graph dwarf  "$APP" "$@"
 
 echo ""
 echo "=== Performance Report ==="

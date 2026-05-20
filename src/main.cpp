@@ -1,198 +1,73 @@
-#include "fmcw_tracker.h"
-#include "problem_description.h"
-#include "radar_algo.h"
+#include "radar.h"
+#include "student_tracker.h"
 
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <cmath>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
 namespace {
 
+using ProblemDescription = dsp::ProblemDescription;
+using TrackerResult = radar::TrackerResult;
+
 struct RuntimeOptions {
-    bool print_truth_summary = true;
+    bool print_truth = true;
+    double duration_s = 1.0;
 };
 
 RuntimeOptions parseRuntimeOptions(int argc, char **argv) {
     RuntimeOptions options;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg(argv[i]);
-        if (arg == "--no-truth" || arg == "--no-truth-csv") {
-            options.print_truth_summary = false;
+        if (arg == "--no-truth") {
+            options.print_truth = false;
             continue;
         }
-
+        if (arg == "--duration" && i + 1 < argc) {
+            options.duration_s = std::stod(argv[++i]);
+            continue;
+        }
         throw std::runtime_error("unknown argument: " + std::string(arg));
     }
 
-    if (const char *disable_truth_csv = std::getenv("VORTEX_DISABLE_TRUTH_CSV")) {
-        options.print_truth_summary = std::strcmp(disable_truth_csv, "0") != 0;
+    if (const char *disable_truth = std::getenv("VORTEX_DISABLE_TRUTH_CSV")) {
+        options.print_truth = std::strcmp(disable_truth, "0") != 0;
     }
-
     return options;
 }
 
-std::string formatVec3(const problem::Vec3 &value) {
-    std::ostringstream out;
-    out << std::fixed << std::setprecision(3) << '[' << value.x() << ", " << value.y() << ", "
-        << value.z() << ']';
-    return out.str();
+ProblemDescription makeSingleTargetTrackingDescription(const ProblemDescription &base) {
+    ProblemDescription description = base;
+    if (description.cars.empty()) {
+        throw std::runtime_error("single-target tracking requires at least one car");
+    }
+
+    description.cars = {description.cars.front()};
+    description.simulator.vehicle_count = 1;
+    description.simulator.random_seed = 0U;
+    description.radar.receiver_noiselevel_stddev = 1e-9;
+    description.radar.receiver_noiselevel_mean = 0.0;
+    description.radar.receiver_noise_distribution_stddev = 1e-6;
+    return description;
 }
 
-problem::Vec3 meanVec3(const std::vector<problem::Vec3> &values) {
-    if (values.empty()) {
-        return problem::Vec3::Zero();
-    }
-
-    problem::Vec3 mean = problem::Vec3::Zero();
-    for (const problem::Vec3 &value : values) {
-        mean += value;
-    }
-    return mean / static_cast<problem::Real>(values.size());
+double positionError(const TrackerResult &estimate, const TrackerResult &truth) {
+    const double dx = estimate.x - truth.x;
+    const double dy = estimate.y - truth.y;
+    const double dz = estimate.z - truth.z;
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-double meanScalar(const std::vector<double> &values) {
-    if (values.empty()) {
-        return 0.0f;
-    }
-
-    double mean = 0.0f;
-    for (double value : values) {
-        mean += value;
-    }
-    return mean / static_cast<double>(values.size());
-}
-
-std::vector<problem::Vec3> lineOfSightVelocityVectors(const fmcw_tracker::TrackSummary &summary) {
-    std::vector<problem::Vec3> los_velocity_mps;
-    const std::size_t count =
-        std::min(summary.batch_results.size(), summary.radial_velocity_mps.size());
-    los_velocity_mps.reserve(count);
-    for (std::size_t i = 0; i < count; ++i) {
-        los_velocity_mps.push_back(summary.radial_velocity_mps[i] *
-                                   summary.batch_results[i].direction);
-    }
-    return los_velocity_mps;
-}
-
-std::vector<problem::Vec3>
-truthVelocityVectors(const std::vector<problem::SimulationMetrics> &truth_metrics) {
-    std::vector<problem::Vec3> velocities;
-    velocities.reserve(truth_metrics.size());
-    for (const problem::SimulationMetrics &truth : truth_metrics) {
-        velocities.push_back(truth.velocity_mps);
-    }
-    return velocities;
-}
-
-std::vector<problem::Vec3>
-truthLineOfSightVelocityVectors(const std::vector<problem::SimulationMetrics> &truth_metrics) {
-    std::vector<problem::Vec3> velocities;
-    velocities.reserve(truth_metrics.size());
-    for (const problem::SimulationMetrics &truth : truth_metrics) {
-        velocities.push_back(truth.radial_velocity_mps * truth.line_of_sight);
-    }
-    return velocities;
-}
-
-double rmseVec3(const std::vector<problem::Vec3> &estimates,
-                const std::vector<problem::SimulationMetrics> &truth) {
-    if (estimates.empty() || estimates.size() != truth.size()) {
-        return 0.0f;
-    }
-
-    double squared_error_sum = 0.0f;
-    for (std::size_t i = 0; i < estimates.size(); ++i) {
-        squared_error_sum += (estimates[i] - truth[i].position_m).squaredNorm();
-    }
-    return std::sqrt(squared_error_sum / static_cast<double>(estimates.size()));
-}
-
-double rmseRange(const std::vector<double> &ranges_m,
-                 const std::vector<problem::SimulationMetrics> &truth) {
-    if (ranges_m.empty() || ranges_m.size() != truth.size()) {
-        return 0.0f;
-    }
-
-    double squared_error_sum = 0.0f;
-    for (std::size_t i = 0; i < ranges_m.size(); ++i) {
-        const double error_m = ranges_m[i] - truth[i].range_m;
-        squared_error_sum += error_m * error_m;
-    }
-    return std::sqrt(squared_error_sum / static_cast<double>(ranges_m.size()));
-}
-
-double degrees(double radians) {
-    return radians * 180.0f / problem::Constants::kPi;
-}
-
-double azimuthDeg(const problem::Vec3 &direction) {
-    return degrees(std::atan2(direction.y(), direction.x()));
-}
-
-double elevationDeg(const problem::Vec3 &direction) {
-    return degrees(std::atan2(direction.z(), std::hypot(direction.x(), direction.y())));
-}
-
-double wrapAngleDeg(double angle_deg) {
-    while (angle_deg > 180.0f) {
-        angle_deg -= 360.0f;
-    }
-    while (angle_deg < -180.0f) {
-        angle_deg += 360.0f;
-    }
-    return angle_deg;
-}
-
-double rmseAzimuthDeg(const std::vector<fmcw_tracker::BatchResult> &batches,
-                      const std::vector<problem::SimulationMetrics> &truth) {
-    if (batches.empty() || batches.size() != truth.size()) {
-        return 0.0f;
-    }
-
-    double squared_error_sum = 0.0f;
-    for (std::size_t i = 0; i < batches.size(); ++i) {
-        const double error_deg =
-            wrapAngleDeg(azimuthDeg(batches[i].direction) - azimuthDeg(truth[i].line_of_sight));
-        squared_error_sum += error_deg * error_deg;
-    }
-    return std::sqrt(squared_error_sum / static_cast<double>(batches.size()));
-}
-
-double rmseElevationDeg(const std::vector<fmcw_tracker::BatchResult> &batches,
-                        const std::vector<problem::SimulationMetrics> &truth) {
-    if (batches.empty() || batches.size() != truth.size()) {
-        return 0.0f;
-    }
-
-    double squared_error_sum = 0.0f;
-    for (std::size_t i = 0; i < batches.size(); ++i) {
-        const double error_deg =
-            elevationDeg(batches[i].direction) - elevationDeg(truth[i].line_of_sight);
-        squared_error_sum += error_deg * error_deg;
-    }
-    return std::sqrt(squared_error_sum / static_cast<double>(batches.size()));
-}
-
-std::string formatFrequencyCandidates(const std::vector<double> &frequencies_hz,
-                                      const std::vector<double> &powers) {
-    std::ostringstream out;
-    out << '[';
-    const std::size_t count = std::min(frequencies_hz.size(), powers.size());
-    for (std::size_t i = 0; i < count; ++i) {
-        if (i > 0) {
-            out << ", ";
-        }
-        out << std::fixed << std::setprecision(3) << frequencies_hz[i] << " Hz @ "
-            << std::scientific << std::setprecision(3) << powers[i];
-    }
-    out << ']';
-    return out.str();
+void printState(const char *label, const TrackerResult &result) {
+    std::cout << label << " t=" << result.time_s << " s"
+              << " pos=[" << result.x << ", " << result.y << ", " << result.z << "]"
+              << " vel=[" << result.vx << ", " << result.vy << ", " << result.vz << "]"
+              << " valid=" << (result.valid ? "true" : "false") << '\n';
 }
 
 } // namespace
@@ -200,78 +75,50 @@ std::string formatFrequencyCandidates(const std::vector<double> &frequencies_hz,
 int main(int argc, char **argv) {
     try {
         const RuntimeOptions runtime_options = parseRuntimeOptions(argc, argv);
+        const ProblemDescription description =
+            makeSingleTargetTrackingDescription(dsp::kDefaultProblemDescription);
 
-        const problem::ProblemDescription description =
-            radar_algo::makeSingleTargetTrackingDescription(problem::kDefaultProblemDescription);
+        radar::Session session(description);
+        radar::StudentTracker tracker(description);
+        
+        session.init();
 
-        fmcw_tracker::StreamingTracker tracker(description);
-        radar_algo::streamRadarChirps(description,
-                                      [&tracker](std::size_t chirp_index,
-                                                 std::span<const radar_algo::Complex> tx_chirp,
-                                                 std::span<const radar_algo::Complex> rx_block) {
-                                          tracker.pushChirp(chirp_index, tx_chirp, rx_block);
-                                      });
+        const double chirp_duration_s = static_cast<double>(dsp::RadarSettings::kRadarBlockSize) /
+                                       description.radar.sample_rate_hz;
+        const std::size_t num_chirps =
+            static_cast<std::size_t>(std::ceil(runtime_options.duration_s / chirp_duration_s));
 
-        const fmcw_tracker::TrackSummary summary = tracker.buildSummary();
-        if (summary.batch_results.empty()) {
-            throw std::runtime_error("tracker produced no CPI results");
-        }
-
-        const auto &first_estimate = summary.batch_results.front();
         std::cout << std::fixed << std::setprecision(3);
-        std::cout << "Processed " << summary.batch_results.size()
-                  << " CPI batch(es) for one target.\n";
-        std::cout << "First batch estimate: "
-                  << "t=" << first_estimate.time_s << " s, "
-                  << "range=" << first_estimate.range_m << " m, "
-                  << "doppler=" << first_estimate.doppler_hz << " Hz, "
-                  << "dir=" << formatVec3(first_estimate.direction) << '\n';
+        std::cout << "Simulating " << num_chirps << " chirps (" << runtime_options.duration_s
+                  << " s).\n";
 
-        if (runtime_options.print_truth_summary) {
-            const auto &first_truth = summary.truth_metrics.front();
-            std::cout << "First batch truth: "
-                      << "range=" << first_truth.range_m << " m, "
-                      << "doppler=" << first_truth.doppler_hz << " Hz, "
-                      << "xyz=" << formatVec3(first_truth.position_m) << '\n';
-        }
+        for (std::size_t chirp_idx = 0; chirp_idx < num_chirps; ++chirp_idx) {
+            // Get data from simulator
+            const radar::SignalBlock block = session.nextChirp();
+            
+            // Student processes the data
+            tracker.processChirp(block);
 
-        std::cout << "Mean radial velocity: " << meanScalar(summary.radial_velocity_mps)
-                  << " m/s\n";
-        std::cout << "Mean LOS velocity vector: "
-                  << formatVec3(meanVec3(lineOfSightVelocityVectors(summary))) << " m/s\n";
-        if (runtime_options.print_truth_summary) {
-            std::cout << "Mean truth LOS velocity vector: "
-                      << formatVec3(
-                             meanVec3(truthLineOfSightVelocityVectors(summary.truth_metrics)))
-                      << " m/s\n";
-            std::cout << "Mean truth Cartesian velocity: "
-                      << formatVec3(meanVec3(truthVelocityVectors(summary.truth_metrics)))
-                      << " m/s\n";
+            // Periodically compare student estimate against ground truth
+            if (chirp_idx % 1000 == 0 || chirp_idx == num_chirps - 1) {
+                const TrackerResult truth = session.truth();
+                const TrackerResult estimate = tracker.getLatestEstimate();
+
+                std::cout << "Chirp " << chirp_idx << " (t=" << block.start_time_s << "s)\n";
+                if (estimate.valid) {
+                    printState("  estimate", estimate);
+                } else {
+                    std::cout << "  estimate: (not implemented/invalid)\n";
+                }
+
+                if (runtime_options.print_truth) {
+                    printState("  truth   ", truth);
+                    if (estimate.valid) {
+                        std::cout << "  error=" << positionError(estimate, truth) << " m\n";
+                    }
+                }
+            }
         }
-        std::cout << "Micro-Doppler frequency: " << summary.microdoppler_phase_frequency_hz
-                  << " Hz\n";
-        std::cout << "Micro-Doppler truth frequency: " << summary.microdoppler_truth_frequency_hz
-                  << " Hz\n";
-        std::cout << "Micro-Doppler frequency RMSE: " << summary.microdoppler_frequency_rmse_hz
-                  << " Hz\n";
-        std::cout << "Micro-Doppler valid CPI count: " << summary.microdoppler_valid_cpi_count
-                  << '\n';
-        std::cout << "Micro-Doppler peak power: " << summary.microdoppler_peak_power << '\n';
-        std::cout << "Micro-Doppler phase residual mean/std/rms: "
-                  << summary.microdoppler_residual_phase_mean_rad << " / "
-                  << summary.microdoppler_residual_phase_stddev_rad << " / "
-                  << summary.microdoppler_residual_phase_rms_rad << " rad\n";
-        std::cout << "Micro-Doppler top candidates: "
-                  << formatFrequencyCandidates(summary.microdoppler_candidate_frequency_hz,
-                                               summary.microdoppler_candidate_power)
-                  << '\n';
-        std::cout << "RMSE raw XYZ: " << rmseVec3(summary.raw_positions_m, summary.truth_metrics)
-                  << " m\n";
-        std::cout << "RMSE range: " << rmseRange(summary.ranges_m, summary.truth_metrics) << " m\n";
-        std::cout << "RMSE azimuth: "
-                  << rmseAzimuthDeg(summary.batch_results, summary.truth_metrics) << " deg\n";
-        std::cout << "RMSE elevation: "
-                  << rmseElevationDeg(summary.batch_results, summary.truth_metrics) << " deg\n";
     } catch (const std::exception &ex) {
         std::cerr << "Radar demo failed: " << ex.what() << '\n';
         return 1;

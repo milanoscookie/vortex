@@ -4,6 +4,8 @@
 # 
 # This file includes the relevant testing commands required for 
 # testing this directory and lists subdirectories to be tested as well.
+add_test(vortex_test_bounded_queue "/home/milan/Documents/DSPClass/radar/build-perf/tests/vortex_test_bounded_queue")
+set_tests_properties(vortex_test_bounded_queue PROPERTIES  _BACKTRACE_TRIPLES "/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;28;add_test;/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;0;")
 add_test(vortex_test_ring_buffer "/home/milan/Documents/DSPClass/radar/build-perf/tests/vortex_test_ring_buffer")
 set_tests_properties(vortex_test_ring_buffer PROPERTIES  _BACKTRACE_TRIPLES "/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;28;add_test;/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;0;")
 add_test(vortex_test_double_buffer_spsc "/home/milan/Documents/DSPClass/radar/build-perf/tests/vortex_test_double_buffer_spsc")
@@ -14,5 +16,3 @@ add_test(vortex_test_lp_butterworth "/home/milan/Documents/DSPClass/radar/build-
 set_tests_properties(vortex_test_lp_butterworth PROPERTIES  _BACKTRACE_TRIPLES "/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;28;add_test;/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;0;")
 add_test(vortex_test_linear_system "/home/milan/Documents/DSPClass/radar/build-perf/tests/vortex_test_linear_system")
 set_tests_properties(vortex_test_linear_system PROPERTIES  _BACKTRACE_TRIPLES "/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;28;add_test;/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;0;")
-add_test(vortex_test_fmcw_tracker "/home/milan/Documents/DSPClass/radar/build-perf/tests/vortex_test_fmcw_tracker")
-set_tests_properties(vortex_test_fmcw_tracker PROPERTIES  _BACKTRACE_TRIPLES "/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;28;add_test;/home/milan/Documents/DSPClass/radar/tests/CMakeLists.txt;0;")

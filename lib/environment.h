@@ -10,29 +10,30 @@
 
 class Environment {
   public:
-    using size_t = std::size_t;
-    using Complex = std::complex<float>;
-    using RadarSettings = problem::RadarSettings;
-    using FloorplaneClutterSettings = problem::FloorplaneClutterSettings;
-    using Constants = problem::Constants;
+    using Complex = dsp::Complex;
+    using RadarSettings = dsp::RadarSettings;
+    using FloorplaneClutterSettings = dsp::FloorplaneClutterSettings;
+    using Constants = dsp::Constants;
 
-    explicit Environment(const RadarSettings &radar_settings) noexcept;
-    Environment(const RadarSettings &radar_settings,
-                const FloorplaneClutterSettings &floorplane_settings) noexcept;
+    // RT-unsafe.
+    // Copies configuration and precomputes one chirp of floorplane clutter state.
+    explicit Environment(const RadarSettings &radar_settings,
+                         const FloorplaneClutterSettings &floorplane_settings = {});
 
+    // RT-safe.
     bool hasStaticFloorplane() const noexcept {
         return floorplane_valid_;
     }
-    Complex sampleStaticFloorplane(size_t fast_time_index) const noexcept;
+
+    // RT-safe.
+    // Returns one precomputed floorplane clutter sample for the given fast-time index.
+    [[nodiscard]] Complex sampleStaticFloorplane(std::size_t fastTimeIndex) const noexcept;
 
   private:
     void clearFloorplane() noexcept;
     void initializeFloorplane(const FloorplaneClutterSettings &floorplane_settings) noexcept;
 
     RadarSettings radar_settings_;
-    float floorplane_beat_frequency_hz_ = 0.0f;
-    float floorplane_amplitude_ = 0.0f;
-    float floorplane_base_phase_rad_ = 0.0f;
-    std::array<Complex, problem::RadarSettings::kRadarBlockSize> floorplane_samples_{};
+    std::array<Complex, dsp::RadarSettings::kRadarBlockSize> floorplane_samples_{};
     bool floorplane_valid_ = false;
 };

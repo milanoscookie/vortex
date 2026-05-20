@@ -1,8 +1,6 @@
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 add_library(vortex_core STATIC
-  fmcw_tracker.cpp
-  radar_algo.cpp
+  radar.cpp
+  student_tracker.cpp
   ${VORTEX_CORE_SOURCES}
 )
 target_include_directories(vortex_core PUBLIC

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -7,63 +8,69 @@ template <typename T> class DoubleBufferSPSC {
   public:
     DoubleBufferSPSC() = default;
 
+    // RT-safe.
+    // Publishes one fully written value through fixed-capacity double-buffer storage.
     void publish(const T &value) {
-        const uint64_t next = seq_.load(std::memory_order_relaxed) + 1;
-        const std::size_t idx = indexFromSeq_(next);
-
-        buf_[idx] = value; // copy assignment? may be an issue; For templated
-                           // Eigen::Maxtrix, this is not an issue
-
-        seq_.store(next, std::memory_order_release);
+        const std::uint64_t nextSequence = sequence_.load(std::memory_order_relaxed) + 1U;
+        const std::size_t writeIndex = indexFromSequence(nextSequence);
+        buffers_[writeIndex] = value;
+        sequence_.store(nextSequence, std::memory_order_release);
     }
 
-    T &beginWrite() {
-        pending_seq_ = seq_.load(std::memory_order_relaxed) + 1;
-        pending_idx_ = indexFromSeq_(pending_seq_);
-        return buf_[pending_idx_];
+    // RT-safe.
+    // Returns a writable staging slot for the next publish on the producer side.
+    T &beginWrite() noexcept {
+        pendingSequence_ = sequence_.load(std::memory_order_relaxed) + 1U;
+        pendingIndex_ = indexFromSequence(pendingSequence_);
+        return buffers_[pendingIndex_];
     }
 
-    void commit() {
-        // beginWrite was called?
-        seq_.store(pending_seq_, std::memory_order_release);
+    // RT-safe.
+    // Publishes the value previously written through beginWrite().
+    void commit() noexcept {
+        sequence_.store(pendingSequence_, std::memory_order_release);
     }
 
-    bool tryRead(T &out) const {
-        const uint64_t s = seq_.load(std::memory_order_acquire);
-        if (s == last_read_seq_)
+    // RT-safe.
+    // Reads the latest value only when it has not been consumed yet.
+    [[nodiscard]] bool tryRead(T &out) const {
+        const std::uint64_t currentSequence = sequence_.load(std::memory_order_acquire);
+        if (currentSequence == lastReadSequence_) {
             return false;
+        }
 
-        out = buf_[indexFromSeq_(s)];
-        last_read_seq_ = s;
+        out = buffers_[indexFromSequence(currentSequence)];
+        lastReadSequence_ = currentSequence;
         return true;
     }
 
+    // RT-safe.
+    // Reads the latest published value, including repeats.
     void readLatest(T &out) const {
-        const uint64_t s = seq_.load(std::memory_order_acquire);
-        out = buf_[indexFromSeq_(s)];
-        last_read_seq_ = s;
+        const std::uint64_t currentSequence = sequence_.load(std::memory_order_acquire);
+        out = buffers_[indexFromSequence(currentSequence)];
+        lastReadSequence_ = currentSequence;
     }
 
-    bool hasNew() const {
-        const uint64_t s = seq_.load(std::memory_order_acquire);
-        return s != last_read_seq_;
+    // RT-safe.
+    [[nodiscard]] bool hasNew() const noexcept {
+        const std::uint64_t currentSequence = sequence_.load(std::memory_order_acquire);
+        return currentSequence != lastReadSequence_;
     }
 
-    uint64_t sequence() const {
-        return seq_.load(std::memory_order_acquire);
+    // RT-safe.
+    [[nodiscard]] std::uint64_t sequence() const noexcept {
+        return sequence_.load(std::memory_order_acquire);
     }
 
   private:
-    static std::size_t indexFromSeq_(uint64_t seq) {
-        return static_cast<std::size_t>(seq & 1ull);
+    [[nodiscard]] static std::size_t indexFromSequence(std::uint64_t sequence) noexcept {
+        return static_cast<std::size_t>(sequence & 1ULL);
     }
 
-    // CPU cache
-    alignas(64) mutable T buf_[2] = {T{}, T{}};
-    alignas(64) std::atomic<uint64_t> seq_{0};
-
-    mutable uint64_t last_read_seq_ = 0;
-
-    uint64_t pending_seq_ = 0;
-    std::size_t pending_idx_ = 0U;
+    alignas(64) mutable T buffers_[2] = {T{}, T{}};
+    alignas(64) std::atomic<std::uint64_t> sequence_{0U};
+    mutable std::uint64_t lastReadSequence_ = 0U;
+    std::uint64_t pendingSequence_ = 0U;
+    std::size_t pendingIndex_ = 0U;
 };

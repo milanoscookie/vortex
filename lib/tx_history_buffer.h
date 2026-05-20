@@ -11,48 +11,55 @@ template <typename Complex, std::size_t HistorySize> class TxHistoryBuffer {
     static_assert((HistorySize & (HistorySize - 1U)) == 0U,
                   "TX history size must be a power of two");
 
-    using size_t = std::size_t;
-    static constexpr size_t kMask = HistorySize - 1U;
+    static constexpr std::size_t kMask = HistorySize - 1U;
 
     TxHistoryBuffer() {
         clear();
     }
 
-    void clear() noexcept {
-        samples_.fill(Complex(0.0f, 0.0f));
+    // RT-safe.
+    // Clears the fixed-capacity history buffer.
+    void clear() {
+        samples_.fill(Complex(0.0, 0.0));
     }
 
-    void store(size_t sample_index, Complex sample) noexcept {
-        samples_[sample_index & kMask] = sample;
+    // RT-safe.
+    // Stores one transmit sample into the circular history.
+    void store(std::size_t sampleIndex, Complex sample) {
+        samples_[sampleIndex & kMask] = sample;
     }
 
-    void storeBlock(size_t start_index, const Complex *samples, size_t sample_count) noexcept {
-        for (size_t i = 0; i < sample_count; ++i) {
-            store(start_index + i, samples[i]);
+    // RT-safe.
+    // Stores a contiguous block of transmit samples into the circular history.
+    void storeBlock(std::size_t startIndex, const Complex *samples, std::size_t sampleCount) {
+        for (std::size_t index = 0; index < sampleCount; ++index) {
+            store(startIndex + index, samples[index]);
         }
     }
 
-    Complex delayedSample(size_t sample_index, double delay_samples) const noexcept {
-        const float delayed_index =
-            static_cast<float>(sample_index) - static_cast<float>(delay_samples);
-        if (delayed_index < 0.0f) {
-            return Complex(0.0f, 0.0f);
+    // RT-safe.
+    // Returns a linearly interpolated delayed sample from the fixed-capacity history.
+    [[nodiscard]] Complex delayedSample(std::size_t sampleIndex, double delaySamples) const {
+        const double delayedIndex =
+            static_cast<double>(sampleIndex) - static_cast<double>(delaySamples);
+        if (delayedIndex < 0.0) {
+            return Complex(0.0, 0.0);
         }
 
-        const size_t lower_index = static_cast<size_t>(std::floor(delayed_index));
-        const size_t upper_index = lower_index + 1U;
-        if (sample_index < lower_index || sample_index - lower_index >= HistorySize) {
-            return Complex(0.0f, 0.0f);
+        const std::size_t lowerIndex = static_cast<std::size_t>(std::floor(delayedIndex));
+        const std::size_t upperIndex = lowerIndex + 1U;
+        if (sampleIndex < lowerIndex || sampleIndex - lowerIndex >= HistorySize) {
+            return Complex(0.0, 0.0);
         }
 
-        const float fraction = delayed_index - static_cast<float>(lower_index);
-        const Complex lower_sample = samples_[lower_index & kMask];
-        Complex upper_sample = lower_sample;
-        if (upper_index <= sample_index && sample_index - upper_index < HistorySize) {
-            upper_sample = samples_[upper_index & kMask];
+        const double fraction = delayedIndex - static_cast<double>(lowerIndex);
+        const Complex lowerSample = samples_[lowerIndex & kMask];
+        Complex upperSample = lowerSample;
+        if (upperIndex <= sampleIndex && sampleIndex - upperIndex < HistorySize) {
+            upperSample = samples_[upperIndex & kMask];
         }
 
-        return ((1.0f - fraction) * lower_sample) + (fraction * upper_sample);
+        return ((1.0 - fraction) * lowerSample) + (fraction * upperSample);
     }
 
   private:

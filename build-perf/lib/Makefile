@@ -126,6 +126,92 @@ depend:
 	cd /home/milan/Documents/DSPClass/radar/build-perf && $(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 1
 .PHONY : depend
 
+# Convenience name for target.
+lib/CMakeFiles/vortex_lib_obj.dir/rule:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 lib/CMakeFiles/vortex_lib_obj.dir/rule
+.PHONY : lib/CMakeFiles/vortex_lib_obj.dir/rule
+
+# Convenience name for target.
+vortex_lib_obj: lib/CMakeFiles/vortex_lib_obj.dir/rule
+.PHONY : vortex_lib_obj
+
+# fast build rule for target.
+vortex_lib_obj/fast:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/build
+.PHONY : vortex_lib_obj/fast
+
+dynamics.o: dynamics.cpp.o
+.PHONY : dynamics.o
+
+# target to build an object file
+dynamics.cpp.o:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/dynamics.cpp.o
+.PHONY : dynamics.cpp.o
+
+dynamics.i: dynamics.cpp.i
+.PHONY : dynamics.i
+
+# target to preprocess a source file
+dynamics.cpp.i:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/dynamics.cpp.i
+.PHONY : dynamics.cpp.i
+
+dynamics.s: dynamics.cpp.s
+.PHONY : dynamics.s
+
+# target to generate assembly for a file
+dynamics.cpp.s:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/dynamics.cpp.s
+.PHONY : dynamics.cpp.s
+
+environment.o: environment.cpp.o
+.PHONY : environment.o
+
+# target to build an object file
+environment.cpp.o:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/environment.cpp.o
+.PHONY : environment.cpp.o
+
+environment.i: environment.cpp.i
+.PHONY : environment.i
+
+# target to preprocess a source file
+environment.cpp.i:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/environment.cpp.i
+.PHONY : environment.cpp.i
+
+environment.s: environment.cpp.s
+.PHONY : environment.s
+
+# target to generate assembly for a file
+environment.cpp.s:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/environment.cpp.s
+.PHONY : environment.cpp.s
+
+simulation.o: simulation.cpp.o
+.PHONY : simulation.o
+
+# target to build an object file
+simulation.cpp.o:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/simulation.cpp.o
+.PHONY : simulation.cpp.o
+
+simulation.i: simulation.cpp.i
+.PHONY : simulation.i
+
+# target to preprocess a source file
+simulation.cpp.i:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/simulation.cpp.i
+.PHONY : simulation.cpp.i
+
+simulation.s: simulation.cpp.s
+.PHONY : simulation.s
+
+# target to generate assembly for a file
+simulation.cpp.s:
+	cd /home/milan/Documents/DSPClass/radar/build-perf && $(MAKE) $(MAKESILENT) -f lib/CMakeFiles/vortex_lib_obj.dir/build.make lib/CMakeFiles/vortex_lib_obj.dir/simulation.cpp.s
+.PHONY : simulation.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -135,6 +221,16 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... test"
+	@echo "... vortex_lib_obj"
+	@echo "... dynamics.o"
+	@echo "... dynamics.i"
+	@echo "... dynamics.s"
+	@echo "... environment.o"
+	@echo "... environment.i"
+	@echo "... environment.s"
+	@echo "... simulation.o"
+	@echo "... simulation.i"
+	@echo "... simulation.s"
 .PHONY : help
 
 

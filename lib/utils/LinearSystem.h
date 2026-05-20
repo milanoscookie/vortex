@@ -16,18 +16,22 @@ template <int IR_SIZE> class LinearSystem {
     LinearSystem() = default;
     LinearSystem(const IRBlock &impulseResponse) : impulseResponse_(impulseResponse) {}
 
+    // RT-unsafe.
+    // Updates filter coefficients/state outside the processing path.
     void setImpulseResponse(const IRBlock &impulseResponse) {
         impulseResponse_ = impulseResponse;
     }
 
+    // RT-safe.
     const IRBlock &getImpulseResponse() const {
         return impulseResponse_;
     }
 
-    // Block-based FIR: output = sum_{k=0}^{IR_SIZE-1} h[k] * x[n-k]
-    // contiguous block processing with a history of past blocks.
+    // RT-safe.
+    // Processes one fixed-size block using preallocated history storage.
+    // Implements output[n] = sum_k h[k] * input[n - k] across block boundaries.
     void step(const Block &input, Block &output) {
-        inputHistory_.push_back(input);
+        inputHistory_.pushBack(input);
         output.setZero();
 
         // For each output sample within the block
@@ -49,7 +53,7 @@ template <int IR_SIZE> class LinearSystem {
                         x_index + past * dsp::BLOCK_SIZE; // bring into [0, BLOCK_SIZE)
 
                     if (static_cast<std::size_t>(past) <= inputHistory_.size()) {
-                        const Block *b = inputHistory_.from_back(static_cast<std::size_t>(past));
+                        const Block *b = inputHistory_.fromBack(static_cast<std::size_t>(past));
                         if (b) {
                             y += impulseResponse_(k) * (*b)(idx_in_block);
                         }

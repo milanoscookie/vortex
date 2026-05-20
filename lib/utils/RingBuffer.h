@@ -3,69 +3,99 @@
 #include <array>
 #include <cstddef>
 
-template <typename T, size_t Capacity> class RingBuffer {
+template <typename T, std::size_t Capacity> class RingBuffer {
   public:
-    void push_back(const T &v) {
-        buffer_[tail_] = v;
-        tail_ = (tail_ + 1) % Capacity;
+    // RT-safe.
+    // Writes one item into fixed-capacity storage and overwrites the oldest item when full.
+    void pushBack(const T &value) {
+        buffer_[tailIndex_] = value;
+        tailIndex_ = (tailIndex_ + 1U) % Capacity;
 
         if (size_ < Capacity) {
             ++size_;
         } else {
-            head_ = (head_ + 1) % Capacity; // overwrite oldest
+            headIndex_ = (headIndex_ + 1U) % Capacity;
         }
     }
 
-    void pop_front() {
-        if (size_ == 0)
+    // RT-safe.
+    // Removes the oldest item when one is available.
+    void popFront() noexcept {
+        if (size_ == 0U) {
             return;
-        head_ = (head_ + 1) % Capacity;
+        }
+
+        headIndex_ = (headIndex_ + 1U) % Capacity;
         --size_;
     }
 
-    const T *front() const {
-        if (size_ == 0)
+    // RT-safe.
+    // Returns the oldest item pointer or null when the buffer is empty.
+    [[nodiscard]] const T *front() const noexcept {
+        if (size_ == 0U) {
             return nullptr;
-        return &buffer_[head_];
+        }
+
+        return &buffer_[headIndex_];
     }
 
-    const T *back() const {
-        if (size_ == 0)
+    // RT-safe.
+    // Returns the newest item pointer or null when the buffer is empty.
+    [[nodiscard]] const T *back() const noexcept {
+        if (size_ == 0U) {
             return nullptr;
-        return &buffer_[(tail_ + Capacity - 1) % Capacity];
+        }
+
+        return &buffer_[(tailIndex_ + Capacity - 1U) % Capacity];
     }
 
-    const T *from_back(size_t k) const {
-        if (k >= size_)
+    // RT-safe.
+    // Returns the kth item from the newest end, where k = 0 selects the newest item.
+    [[nodiscard]] const T *fromBack(std::size_t index) const noexcept {
+        if (index >= size_) {
             return nullptr;
-        return &buffer_[(tail_ + Capacity - 1 - k) % Capacity];
+        }
+
+        return &buffer_[(tailIndex_ + Capacity - 1U - index) % Capacity];
     }
 
-    const T *from_front(size_t k) const {
-        if (k >= size_)
+    // RT-safe.
+    // Returns the kth item from the oldest end, where k = 0 selects the oldest item.
+    [[nodiscard]] const T *fromFront(std::size_t index) const noexcept {
+        if (index >= size_) {
             return nullptr;
-        return &buffer_[(head_ + k) % Capacity];
+        }
+
+        return &buffer_[(headIndex_ + index) % Capacity];
     }
 
-    // k = 0 -> front (oldest), k = size-1 -> newest
-    const T &operator[](size_t k) const {
-        return buffer_[(head_ + k) % Capacity];
+    // RT-safe.
+    // Returns the kth item from the oldest end, where k = 0 selects the oldest item.
+    [[nodiscard]] const T &operator[](std::size_t index) const noexcept {
+        return buffer_[(headIndex_ + index) % Capacity];
     }
 
-    size_t size() const {
+    // RT-safe.
+    [[nodiscard]] std::size_t size() const noexcept {
         return size_;
     }
-    constexpr size_t capacity() const {
+
+    // RT-safe.
+    [[nodiscard]] static constexpr std::size_t capacity() noexcept {
         return Capacity;
     }
 
-    void clear() {
-        head_ = tail_ = size_ = 0;
+    // RT-safe.
+    // Resets logical indices without touching stored elements.
+    void clear() noexcept {
+        headIndex_ = 0U;
+        tailIndex_ = 0U;
+        size_ = 0U;
     }
 
   private:
-    std::array<T, Capacity> buffer_;
-    size_t head_ = 0;
-    size_t tail_ = 0;
-    size_t size_ = 0;
+    std::array<T, Capacity> buffer_{};
+    std::size_t headIndex_ = 0U;
+    std::size_t tailIndex_ = 0U;
+    std::size_t size_ = 0U;
 };

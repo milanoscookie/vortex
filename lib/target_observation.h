@@ -7,36 +7,41 @@
 
 namespace radar {
 
+using Vec3 = dsp::Vec3;
+using RadarSettings = dsp::RadarSettings;
+using SimulationMetrics = dsp::SimulationMetrics;
+using Constants = dsp::Constants;
+
 struct TargetObservation {
-    problem::Vec3 position_m = problem::Vec3::Zero();
-    problem::Vec3 velocity_mps = problem::Vec3::Zero();
-    problem::Vec3 line_of_sight = problem::Vec3::Zero();
-    problem::Real range_m = 0.0f;
-    problem::Real safe_range_m = 0.0f;
-    problem::Real delay_s = 0.0f;
-    problem::Real radial_velocity_mps = 0.0f;
-    problem::Real doppler_hz = 0.0f;
+    Vec3 position_m = Vec3::Zero();
+    Vec3 velocity_mps = Vec3::Zero();
+    Vec3 line_of_sight = Vec3::Zero();
+    double range_m = 0.0f;
+    double safe_range_m = 0.0f;
+    double delay_s = 0.0f;
+    double radial_velocity_mps = 0.0f;
+    double doppler_hz = 0.0f;
 };
 
 inline TargetObservation observeTarget(const CarDynamics &dynamics,
-                                       const problem::RadarSettings &radar_settings,
-                                       problem::Real t_s) noexcept {
+                                       const RadarSettings &radar_settings,
+                                       double t_s) noexcept {
     TargetObservation observation;
     observation.position_m = dynamics.positionAt(t_s);
     observation.velocity_mps = dynamics.velocityAt(t_s);
     observation.range_m = observation.position_m.norm();
     observation.safe_range_m = std::max(observation.range_m, radar_settings.min_range_m);
     observation.line_of_sight = observation.position_m / observation.safe_range_m;
-    observation.delay_s = 2.0 * observation.range_m / problem::Constants::kSpeedOfLightMps;
+    observation.delay_s = 2.0 * observation.range_m / Constants::kSpeedOfLightMps;
     observation.radial_velocity_mps = observation.velocity_mps.dot(observation.line_of_sight);
-    const problem::Real lambda_m = problem::Constants::kSpeedOfLightMps / radar_settings.carrier_hz;
+    const double lambda_m = Constants::kSpeedOfLightMps / radar_settings.carrier_hz;
     observation.doppler_hz = 2.0 * observation.radial_velocity_mps / lambda_m;
     return observation;
 }
 
-inline problem::SimulationMetrics
-makeSimulationMetrics(problem::Real t_s, const TargetObservation &observation) noexcept {
-    problem::SimulationMetrics metrics;
+inline SimulationMetrics makeSimulationMetrics(double t_s,
+                                               const TargetObservation &observation) noexcept {
+    SimulationMetrics metrics;
     metrics.time_s = t_s;
     metrics.range_m = observation.range_m;
     metrics.delay_s = observation.delay_s;

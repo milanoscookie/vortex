@@ -2,12 +2,12 @@
 enable_testing()
 
 set(TEST_SOURCES
+  vortex_test_bounded_queue.cpp
   vortex_test_ring_buffer.cpp
   vortex_test_double_buffer_spsc.cpp
   vortex_test_iir_filter.cpp
   vortex_test_lp_butterworth.cpp
   vortex_test_linear_system.cpp
-  vortex_test_fmcw_tracker.cpp
 )
 
 foreach(src ${TEST_SOURCES})

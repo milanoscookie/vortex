@@ -4,9 +4,9 @@
 
 class CarDynamics {
   public:
-    using CarSettings = problem::CarSettings;
-    using VehicleState = problem::VehicleState;
-    using Vec3 = problem::Vec3;
+    using CarSettings = dsp::CarSettings;
+    using VehicleState = dsp::VehicleState;
+    using Vec3 = dsp::Vec3;
 
     explicit CarDynamics(const CarSettings &car_settings);
 
@@ -14,8 +14,8 @@ class CarDynamics {
         return car_;
     }
 
-    Vec3 positionAt(problem::Real t_s) const noexcept;
-    Vec3 velocityAt(problem::Real t_s) const noexcept;
+    Vec3 positionAt(double t_s) const noexcept;
+    Vec3 velocityAt(double t_s) const noexcept;
 
   private:
     CarSettings car_;

@@ -19,86 +19,92 @@
 
 class RadarSimulator {
   public:
-    using size_t = std::size_t;
+    static constexpr std::size_t kTxHistorySize = 8192U;
+    static constexpr std::size_t kBlockSize = dsp::RadarSettings::kRadarBlockSize;
 
-    static constexpr size_t kTxHistorySize = 8192U;
-    static constexpr size_t kBlockSize = problem::RadarSettings::kRadarBlockSize;
-
-    using Complex = problem::SignalComplex;
-
-    using Vec3 = problem::Vec3;
-    using CarSettings = problem::CarSettings;
+    using RadarSettings = dsp::RadarSettings;
+    using Complex = dsp::Complex;
+    using Vec3 = dsp::Vec3;
+    using CarSettings = dsp::CarSettings;
     using CarList = std::vector<CarSettings>;
-    using RadarSettings = problem::RadarSettings;
-    using FloorplaneClutterSettings = problem::FloorplaneClutterSettings;
-    using SimulationMetrics = problem::SimulationMetrics;
-    using ProblemDescription = problem::ProblemDescription;
-    using Constants = problem::Constants;
-    using ProbeSettings = problem::ProbeSettings;
+    using FloorplaneClutterSettings = dsp::FloorplaneClutterSettings;
+    using SimulationMetrics = dsp::SimulationMetrics;
+    using ProblemDescription = dsp::ProblemDescription;
+    using Constants = dsp::Constants;
+    using ProbeSettings = dsp::ProbeSettings;
 
     using ElementVector =
         Eigen::Matrix<Complex, static_cast<int>(RadarSettings::kProbeNumElements), 1>;
 
-    template <size_t NumX, size_t NumY> using ProbeState = typename Probe<NumX, NumY>::Compiled;
+    template <std::size_t NumX, std::size_t NumY>
+    using ProbeState = typename Probe<NumX, NumY>::Compiled;
 
     using DefaultProbe = Probe<RadarSettings::kProbeNumX, RadarSettings::kProbeNumY>;
     using DefaultProbeState = ProbeState<RadarSettings::kProbeNumX, RadarSettings::kProbeNumY>;
 
+    // RT-unsafe.
+    // Copies simulation configuration, allocates working storage, and prepares default probe state.
     explicit RadarSimulator(const ProblemDescription &description);
-    explicit RadarSimulator(const RadarSettings &radar_settings,
-                            const CarSettings &car_settings,
-                            std::uint32_t random_seed = 0U);
-    explicit RadarSimulator(const RadarSettings &radar_settings,
-                            const CarList &car_settings,
-                            std::uint32_t random_seed = 0U);
-    RadarSimulator(const RadarSettings &radar_settings,
-                   const CarSettings &car_settings,
-                   const FloorplaneClutterSettings &floorplane_settings,
-                   std::uint32_t random_seed = 0U);
-    RadarSimulator(const RadarSettings &radar_settings,
-                   const CarList &car_settings,
-                   const FloorplaneClutterSettings &floorplane_settings,
-                   std::uint32_t random_seed = 0U);
 
+    // RT-safe.
+    // Processes one sample for the default probe using only preallocated state.
     void step(ElementVector &output, Complex tx_sample);
 
-    template <size_t NumX, size_t NumY>
+    template <std::size_t NumX, std::size_t NumY>
+    // RT-unsafe.
+    // Compiles probe state on demand, then processes one sample.
     void step(const Probe<NumX, NumY> &probe, ElementVector &output, Complex tx_sample);
-    template <size_t NumX, size_t NumY>
+
+    template <std::size_t NumX, std::size_t NumY>
+    // RT-unsafe.
+    // Compiles probe geometry into reusable state before streaming starts.
     ProbeState<NumX, NumY> prepareProbeState(const Probe<NumX, NumY> &probe) const;
 
-    template <size_t NumX, size_t NumY>
+    template <std::size_t NumX, std::size_t NumY>
+    // RT-safe.
+    // Processes one sample using caller-prepared probe state and preallocated scratch buffers.
     void step(const ProbeState<NumX, NumY> &probe_state,
               Eigen::Ref<ElementVector> output,
               Complex tx_sample);
 
+    // RT-safe.
     const RadarSettings &config() const noexcept {
         return radar_settings_;
     }
+
+    // RT-safe.
     const CarSettings &car() const noexcept {
         return dynamics_.front().car();
     }
+
+    // RT-safe.
     const std::vector<CarDynamics> &cars() const noexcept {
         return dynamics_;
     }
-    problem::Real timeSeconds() const noexcept {
+
+    // RT-safe.
+    double timeSeconds() const noexcept {
         return time_s_;
     }
+
+    // RT-safe.
     const SimulationMetrics &lastMetrics() const noexcept {
         return last_metrics_.front();
     }
+
+    // RT-safe.
     const std::vector<SimulationMetrics> &lastMetricsPerTarget() const noexcept {
         return last_metrics_;
     }
 
   private:
-    template <size_t NumX, size_t NumY>
+    RadarSimulator(const ProblemDescription &description, bool already_validated);
+    template <std::size_t NumX, std::size_t NumY>
     ProbeState<NumX, NumY> makeProbeState(const Probe<NumX, NumY> &probe) const;
     DefaultProbeState prepareDefaultProbeState(const ProbeSettings &probe_settings) const;
-    problem::Real sampleIntervalSeconds() const noexcept;
+    double sampleIntervalSeconds() const noexcept;
     SimulationMetrics
-    metricsFromObservation(problem::Real t_s,
-                           const radar::TargetObservation &observation) const noexcept;
+    metricsFromObservation(double t_s, const radar::TargetObservation &observation) const noexcept;
     static std::vector<CarDynamics> makeDynamics(const CarList &car_settings);
     RadarSettings radar_settings_;
     std::vector<CarDynamics> dynamics_;
@@ -106,85 +112,83 @@ class RadarSimulator {
     radar::TxHistoryBuffer<Complex, kTxHistorySize> tx_history_;
     radar::ReceiverNoiseModel receiver_noise_model_;
     DefaultProbeState default_probe_state_;
-    size_t sample_index_ = 0;
-    problem::Real time_s_ = 0.0f;
+    std::size_t sample_index_ = 0U;
+    double time_s_ = 0.0f;
     std::vector<radar::TargetObservation> observation_scratch_;
     std::vector<SimulationMetrics> last_metrics_;
 };
 
-template <size_t NumX, size_t NumY>
+template <std::size_t NumX, std::size_t NumY>
 auto RadarSimulator::makeProbeState(const Probe<NumX, NumY> &probe) const
     -> ProbeState<NumX, NumY> {
     return probe.compile();
 }
 
-template <size_t NumX, size_t NumY>
+template <std::size_t NumX, std::size_t NumY>
 auto RadarSimulator::prepareProbeState(const Probe<NumX, NumY> &probe) const
     -> ProbeState<NumX, NumY> {
     return makeProbeState(probe);
 }
 
-template <size_t NumX, size_t NumY>
+template <std::size_t NumX, std::size_t NumY>
 void RadarSimulator::step(const Probe<NumX, NumY> &probe,
                           ElementVector &output,
                           Complex tx_sample) {
     const ProbeState<NumX, NumY> probe_state = makeProbeState(probe);
-    step(probe_state, output, tx_sample);
+    step<NumX, NumY>(probe_state, output, tx_sample);
 }
 
-template <size_t NumX, size_t NumY>
+template <std::size_t NumX, std::size_t NumY>
 void RadarSimulator::step(const ProbeState<NumX, NumY> &probe_state,
                           Eigen::Ref<ElementVector> output,
                           Complex tx_sample) {
-    constexpr size_t element_count = NumX * NumY;
+    constexpr std::size_t elementCount = NumX * NumY;
 
     tx_history_.store(sample_index_, tx_sample);
 
-    const problem::Real t_s = time_s_;
-    const problem::Real wave_number =
+    const double t_s = time_s_;
+    const double wave_number =
         2.0f * Constants::kPi * radar_settings_.carrier_hz / Constants::kSpeedOfLightMps;
     const bool has_floor = environment_.hasStaticFloorplane();
-    std::array<Complex, element_count> noise_samples{};
+    std::array<Complex, elementCount> noiseSamples{};
 
-    receiver_noise_model_.fill(noise_samples);
+    receiver_noise_model_.fill(noiseSamples);
 
-    const Eigen::Map<const ElementVector> noise_map(noise_samples.data());
-    output = noise_map;
-    const Complex floor_sample = environment_.sampleStaticFloorplane(sample_index_ % kBlockSize);
+    const Eigen::Map<const ElementVector> noiseMap(noiseSamples.data());
+    output = noiseMap;
+    const Complex floorSample = environment_.sampleStaticFloorplane(sample_index_ % kBlockSize);
     if (has_floor) {
-        for (int element_index = 0; element_index < static_cast<int>(element_count);
-             ++element_index) {
-            output(element_index) += floor_sample;
+        for (int elementIndex = 0; elementIndex < static_cast<int>(elementCount); ++elementIndex) {
+            output(elementIndex) += floorSample;
         }
     }
 
-    for (std::size_t car_index = 0; car_index < dynamics_.size(); ++car_index) {
-        const CarDynamics &car_dynamics = dynamics_[car_index];
-        observation_scratch_[car_index] = radar::observeTarget(car_dynamics, radar_settings_, t_s);
-        last_metrics_[car_index] = metricsFromObservation(t_s, observation_scratch_[car_index]);
+    for (std::size_t carIndex = 0; carIndex < dynamics_.size(); ++carIndex) {
+        const CarDynamics &carDynamics = dynamics_[carIndex];
+        observation_scratch_[carIndex] = radar::observeTarget(carDynamics, radar_settings_, t_s);
+        last_metrics_[carIndex] = metricsFromObservation(t_s, observation_scratch_[carIndex]);
     }
 
-    for (int element_index = 0; element_index < static_cast<int>(element_count); ++element_index) {
-        const problem::Real weight = probe_state.element_weight(element_index);
+    for (int elementIndex = 0; elementIndex < static_cast<int>(elementCount); ++elementIndex) {
+        const double weight = probe_state.element_weight(elementIndex);
         if (weight == 0.0f) {
-            output(element_index) = Complex(0.0f, 0.0f);
+            output(elementIndex) = Complex(0.0f, 0.0f);
             continue;
         }
 
-        const auto element_position =
-            probe_state.element_positions_m.col(static_cast<Eigen::Index>(element_index));
-        const problem::Real element_delay_samples =
-            probe_state.element_delay_samples(element_index);
+        const auto elementPosition =
+            probe_state.element_positions_m.col(static_cast<Eigen::Index>(elementIndex));
+        const double elementDelaySamples = probe_state.element_delay_samples(elementIndex);
 
-        for (std::size_t car_index = 0; car_index < dynamics_.size(); ++car_index) {
-            output(static_cast<Eigen::Index>(element_index)) +=
-                radar::sampleBistaticTargetReturn(observation_scratch_[car_index],
-                                                  element_position,
-                                                  element_delay_samples,
+        for (std::size_t carIndex = 0; carIndex < dynamics_.size(); ++carIndex) {
+            output(static_cast<Eigen::Index>(elementIndex)) +=
+                radar::sampleBistaticTargetReturn(observation_scratch_[carIndex],
+                                                  elementPosition,
+                                                  elementDelaySamples,
                                                   weight,
                                                   wave_number,
                                                   radar_settings_,
-                                                  dynamics_[car_index].car().reflectivity,
+                                                  dynamics_[carIndex].car().reflectivity,
                                                   tx_history_,
                                                   sample_index_);
         }

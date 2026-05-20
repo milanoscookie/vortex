@@ -1,45 +1,68 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
-#include <deque>
 #include <optional>
+#include <utility>
 
-template <typename T> class BoundedQueue {
+template <typename T, std::size_t Capacity> class BoundedQueue {
   public:
-    explicit BoundedQueue(std::size_t max_capacity) : max_capacity_(max_capacity) {}
+    static_assert(Capacity > 0U, "BoundedQueue capacity must be greater than zero");
+
+    // RT-safe.
+    // Uses fixed-capacity std::array storage and overwrites the oldest item when full.
+    BoundedQueue() = default;
     ~BoundedQueue() = default;
 
+    // RT-safe.
+    // Appends one item and discards the oldest item when the queue is full.
     void push(const T &item) {
-        if (max_capacity_ == 0) {
-            return;
+        items_[tailIndex_] = item;
+        tailIndex_ = nextIndex(tailIndex_);
+
+        if (size_ < Capacity) {
+            ++size_;
+        } else {
+            headIndex_ = nextIndex(headIndex_);
         }
-        if (items_.size() == max_capacity_) {
-            items_.pop_front();
-        }
-        items_.push_back(item);
     }
 
-    std::optional<T> pop() {
-        if (items_.empty()) {
+    // RT-safe.
+    // Removes and returns the oldest item when available.
+    [[nodiscard]] std::optional<T> pop() {
+        if (size_ == 0U) {
             return std::nullopt;
         }
 
-        T item = items_.front();
-        items_.pop_front();
+        std::optional<T> item = std::move(items_[headIndex_]);
+        items_[headIndex_].reset();
+        headIndex_ = nextIndex(headIndex_);
+        --size_;
         return item;
     }
 
-    bool empty() const noexcept {
-        return items_.empty();
+    // RT-safe.
+    [[nodiscard]] bool empty() const noexcept {
+        return size_ == 0U;
     }
-    std::size_t size() const noexcept {
-        return items_.size();
+
+    // RT-safe.
+    [[nodiscard]] std::size_t size() const noexcept {
+        return size_;
     }
-    std::size_t capacity() const noexcept {
-        return max_capacity_;
+
+    // RT-safe.
+    [[nodiscard]] static constexpr std::size_t capacity() noexcept {
+        return Capacity;
     }
 
   private:
-    std::size_t max_capacity_ = 0;
-    std::deque<T> items_;
+    [[nodiscard]] static constexpr std::size_t nextIndex(std::size_t index) noexcept {
+        return (index + 1U) % Capacity;
+    }
+
+    std::array<std::optional<T>, Capacity> items_{};
+    std::size_t headIndex_ = 0U;
+    std::size_t tailIndex_ = 0U;
+    std::size_t size_ = 0U;
 };

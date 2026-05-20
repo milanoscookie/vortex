@@ -1,5 +1,6 @@
 build
 build-perf
+solution
 output
 .cache
 perf.data*

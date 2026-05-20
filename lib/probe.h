@@ -1,7 +1,6 @@
 #pragma once
 
 #include "problem_description.h"
-#include "utils/coords.h"
 
 #include <array>
 #include <cassert>
@@ -9,14 +8,13 @@
 
 template <size_t NumX, size_t NumY> class Probe {
   public:
-    using Coord = coords::Coords;
-    using Vec3 = problem::Vec3;
-    using PositionMatrix = Eigen::Matrix<problem::Real, 3, NumX * NumY>;
-    using ScalarArray = Eigen::Array<problem::Real, NumX * NumY, 1>;
+    using Vec3 = dsp::Vec3;
+    using PositionMatrix = Eigen::Matrix<double, 3, NumX * NumY>;
+    using ElemArray = Eigen::Array<double, NumX * NumY, 1>;
 
     struct ProbeElement {
         bool enabled = true;
-        problem::Real weight = 1.0f;
+        double weight = 1.0f;
         std::size_t delay = 0U;
 
         bool isActive() const noexcept {
@@ -26,20 +24,19 @@ template <size_t NumX, size_t NumY> class Probe {
 
     struct Compiled {
         PositionMatrix element_positions_m = PositionMatrix::Zero();
-        ScalarArray element_delay_samples = ScalarArray::Zero();
-        ScalarArray element_weight = ScalarArray::Zero();
+        ElemArray element_delay_samples = ElemArray::Zero();
+        ElemArray element_weight = ElemArray::Zero();
     };
 
-    Probe(const Coord &center, problem::Real dx, problem::Real dy)
-        : center_(center), dx_(dx), dy_(dy) {}
+    Probe(const Vec3 &center, double dx, double dy) : center_(center), dx_(dx), dy_(dy) {}
 
-    const Coord &center() const noexcept {
+    const Vec3 &center() const noexcept {
         return center_;
     }
-    problem::Real dx() const noexcept {
+    double dx() const noexcept {
         return dx_;
     }
-    problem::Real dy() const noexcept {
+    double dy() const noexcept {
         return dy_;
     }
 
@@ -71,13 +68,13 @@ template <size_t NumX, size_t NumY> class Probe {
         return elems_[flatten(ix, iy)];
     }
 
-    Coord elementPosition(size_t ix, size_t iy) const noexcept {
-        const problem::Real x_offset =
-            (static_cast<problem::Real>(ix) - 0.5f * static_cast<problem::Real>(NumX - 1)) * dx_;
-        const problem::Real y_offset =
-            (static_cast<problem::Real>(iy) - 0.5f * static_cast<problem::Real>(NumY - 1)) * dy_;
+    Vec3 elementPosition(size_t ix, size_t iy) const noexcept {
+        const double x_offset =
+            (static_cast<double>(ix) - 0.5f * static_cast<double>(NumX - 1)) * dx_;
+        const double y_offset =
+            (static_cast<double>(iy) - 0.5f * static_cast<double>(NumY - 1)) * dy_;
 
-        return center_ + Coord(x_offset, y_offset, 0.0f);
+        return center_ + Vec3(x_offset, y_offset, 0.0f);
     }
 
     ProbeElement *data() noexcept {
@@ -109,7 +106,7 @@ template <size_t NumX, size_t NumY> class Probe {
                 compiled.element_positions_m.col(static_cast<Eigen::Index>(flat_index)) =
                     elementPosition(ix, iy);
                 compiled.element_delay_samples(static_cast<Eigen::Index>(flat_index)) =
-                    static_cast<problem::Real>((*this)(ix, iy).delay);
+                    static_cast<double>((*this)(ix, iy).delay);
                 compiled.element_weight(static_cast<Eigen::Index>(flat_index)) =
                     (*this)(ix, iy).isActive() ? (*this)(ix, iy).weight : 0.0f;
             }
@@ -122,8 +119,8 @@ template <size_t NumX, size_t NumY> class Probe {
         return ix * NumY + iy;
     }
 
-    Coord center_;
-    problem::Real dx_;
-    problem::Real dy_;
+    Vec3 center_;
+    double dx_;
+    double dy_;
     std::array<ProbeElement, NumX * NumY> elems_;
 };
